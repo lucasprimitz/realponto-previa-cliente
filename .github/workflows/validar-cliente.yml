@@ -1,0 +1,45 @@
+name: Validar Página do Cliente
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cliente-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Obter arquivos
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Preparar Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Conferir preços e executar testes
+        run: |
+          node scripts/check-pricing-sync.mjs
+          npm test
+      - name: Preparar PHP e dependências
+        run: |
+          php --version
+          composer install --working-dir=customer-service --no-interaction --no-progress --prefer-dist
+      - name: Testar recebimento e equivalência dos valores
+        run: npm run test:contacts
+      - name: Preparar pacote para a TI
+        run: node scripts/package-customer-service.mjs "$RUNNER_TEMP/realponto-cliente" "${{ github.sha }}"
+      - name: Disponibilizar pacote validado
+        uses: actions/upload-artifact@v7
+        with:
+          name: realponto-cliente-${{ github.sha }}
+          path: ${{ runner.temp }}/realponto-cliente/
+          if-no-files-found: error
+          retention-days: 14
