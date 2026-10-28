@@ -1,0 +1,28 @@
+# Exemplo para origem HTTPS própria. Adaptar domínio, certificados, pasta e socket.
+# Nenhum arquivo privado deve ser servido por outro alias, vhost ou link simbólico.
+server {
+    listen 443 ssl;
+    server_name jornada.EXEMPLO;
+    ssl_certificate /CAMINHO/DO/CERTIFICADO;
+    ssl_certificate_key /CAMINHO/DA/CHAVE;
+    root /var/www/realponto-contatos/current/public;
+    index index.html;
+    client_max_body_size 16k;
+    include mime.types;
+    types { text/javascript mjs; }
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
+    location / { try_files $uri $uri/ =404; }
+    location ~ ^/api/(session|requests|login|logout|request-update)\.php$ {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param HTTPS on;
+        fastcgi_param CONTACTS_CONFIG_FILE /etc/realponto-contatos/config.php;
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+    }
+    location ~ \.php$ { return 404; }
+    location ~ /\. { deny all; }
+}
