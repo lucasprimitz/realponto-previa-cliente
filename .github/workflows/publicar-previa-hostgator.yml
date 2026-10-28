@@ -1,0 +1,57 @@
+name: Publicar prévia do cliente na HostGator
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: 'Verificar é somente leitura; publicar envia apenas public/ para a pasta preparada.'
+        type: choice
+        options: [verificar, publicar]
+        default: verificar
+        required: true
+      reenviar_tudo:
+        description: 'Reenviar todos os recursos da prévia, sem apagar arquivos remotos.'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: realponto-previa-hostgator
+  cancel-in-progress: false
+
+jobs:
+  publicar-previa:
+    # Usa a branch padrão do repositório; não presume que o nome seja main.
+    if: >-
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+      (github.event_name == 'workflow_dispatch' || vars.PREVIA_AUTO_DEPLOY == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Ler a versão deste repositório
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Validar o publicador da prévia
+        run: python3 -m py_compile scripts/publicar_previa_hostgator.py
+
+      - name: Verificar ou publicar somente a prévia por FTPS
+        env:
+          PYTHONUNBUFFERED: '1'
+          HOSTGATOR_FTP_HOST: ${{ secrets.HOSTGATOR_FTP_HOST }}
+          HOSTGATOR_FTP_USER: ${{ secrets.HOSTGATOR_FTP_USER }}
+          HOSTGATOR_FTP_PASSWORD: ${{ secrets.HOSTGATOR_FTP_PASSWORD }}
+          HOSTGATOR_FTP_PORT: '21'
+          PREVIA_FTP_DIR: ${{ vars.PREVIA_FTP_DIR }}
+          PREVIA_LOCAL_DIR: ${{ vars.PREVIA_LOCAL_DIR || 'public' }}
+          DEPLOY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.modo || 'publicar' }}
+          FORCE_UPLOAD: ${{ github.event_name == 'workflow_dispatch' && inputs.reenviar_tudo && 'true' || 'false' }}
+          DEPLOY_COMMIT: ${{ github.sha }}
+        run: python3 scripts/publicar_previa_hostgator.py
