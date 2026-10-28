@@ -198,11 +198,15 @@ export async function publishPackage(config, packageRoot, releaseId, commit) {
   return metadata;
 }
 
-async function run(command, args, options = {}) {
+export async function run(command, args, options = {}) {
+  // A validação é outro processo completo. O contexto privado de node:test
+  // impediria --test de executar qualquer arquivo ao herdar o teste chamador.
+  const childEnvironment = {...process.env, GIT_TERMINAL_PROMPT: '0', GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND || 'ssh -oBatchMode=yes -oStrictHostKeyChecking=yes'};
+  delete childEnvironment.NODE_TEST_CONTEXT;
   try {
     const {stdout} = await execFileAsync(command, args, {
       ...options, timeout: 120000, maxBuffer: 4 * 1024 * 1024, windowsHide: true,
-      env: {...process.env, GIT_TERMINAL_PROMPT: '0', GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND || 'ssh -oBatchMode=yes -oStrictHostKeyChecking=yes'},
+      env: childEnvironment,
     });
     return stdout.trim();
   } catch (error) {
