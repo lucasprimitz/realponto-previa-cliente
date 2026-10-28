@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "sourceRepository": "lucasprimitz/realponto-jornada",
+  "sourceBranch": "main",
+  "sourceRef": "refs/heads/main",
+  "sourceCommit": "73b996aceb11874846b2d7980c5ca4bb3e9b7f72",
+  "sourceFile": "dist/quote.mjs",
+  "quoteSha256": "c17429c4a0009a4db1df38f9fdf32eae0aa9f8f051b396ce0ccbe13fae3238d7",
+  "pricingSha256": "931a567ecd81de783bd64e28d2a66ab9ee0ca3407eb1256c05e0344766fb1f99",
+  "synchronizedAt": "2026-10-28T15:32:26.587Z"
+}

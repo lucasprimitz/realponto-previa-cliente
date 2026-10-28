@@ -1,0 +1,15 @@
+{
+  "name": "realponto-previa-cliente",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs customer-preview/*.test.mjs",
+    "test:contacts": "node scripts/generate-contact-pricing-fixtures.mjs && php customer-service/tests/test.php && node customer-service/tests/http.mjs",
+    "package:preview": "node scripts/package-customer-preview.mjs",
+    "package:service": "node scripts/package-customer-service.mjs"
+  }
+}
