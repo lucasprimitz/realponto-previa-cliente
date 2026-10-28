@@ -1,0 +1,23 @@
+[Unit]
+Description=Atualizar somente a previa de clientes Realponto
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=realponto-previa
+Group=realponto-previa
+WorkingDirectory=/var/lib/realponto-previa
+EnvironmentFile=/etc/realponto-previa.env
+Environment=GIT_TERMINAL_PROMPT=0
+ExecStart=/usr/bin/flock -n -E 0 /var/lib/realponto-previa/update.lock /usr/bin/node /usr/local/lib/realponto-previa/update-customer-preview.mjs
+TimeoutStartSec=8min
+UMask=0022
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/realponto-previa /var/www/realponto-previa
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true

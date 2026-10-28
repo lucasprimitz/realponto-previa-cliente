@@ -1,0 +1,11 @@
+[Unit]
+Description=Conferir atualizacoes da previa Realponto a cada minuto
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=1s
+Unit=realponto-previa-update.service
+
+[Install]
+WantedBy=timers.target

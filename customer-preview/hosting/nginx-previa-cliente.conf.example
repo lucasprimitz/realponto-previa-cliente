@@ -1,0 +1,35 @@
+# Incluir DENTRO do server existente que atende 192.168.90.7:8082.
+# Nao criar outro listen nem substituir o root do sistema interno.
+location = /previa-cliente {
+    return 302 /previa-cliente/;
+}
+
+# ^~ impede que regras globais de .mjs desviem para a raiz do site interno.
+location ^~ /previa-cliente/ {
+    alias /var/www/realponto-previa/current/public/;
+    index index.html;
+    autoindex off;
+    open_file_cache off;
+    expires off;
+    # Tipos locais completos para este pacote; sem conflito com mime.types.
+    types {
+        text/html html;
+        text/css css;
+        text/javascript mjs;
+        image/png png;
+    }
+    default_type application/octet-stream;
+
+    # TI: adicionar as MESMAS redes/IPs de LAN/VPN permitidos no site interno.
+    # Local-only ate essa adaptacao. Manter deny all ao final.
+    allow 127.0.0.1;
+    allow ::1;
+    # allow REDE_OU_IP_AUTORIZADO;
+    deny all;
+
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+    add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
+}
