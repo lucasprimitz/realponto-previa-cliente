@@ -1,0 +1,15 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+
+# Segredos e dados locais do recebimento de solicitações
+customer-service/vendor/
+customer-service/private/
+*.sqlite
+*.sqlite-*
+contacts-config.php
+customer-service/tests/pricing-fixtures.json

@@ -1,0 +1,6 @@
+* text=auto
+*.mjs text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+*.example text eol=lf
+*.png binary
