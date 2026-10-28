@@ -9,7 +9,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {packageCustomerPreview} from '../scripts/package-customer-preview.mjs';
-import {BRANCH, PUBLIC_FILES, readConfig, inspectPackage, verifyHealth, currentRelease, publishPackage, updatePreview} from '../scripts/update-customer-preview.mjs';
+import {BRANCH, PUBLIC_FILES, readConfig, inspectPackage, verifyHealth, currentRelease, publishPackage, updatePreview, run} from '../scripts/update-customer-preview.mjs';
 
 const command = promisify(execFile);
 const project = fileURLToPath(new URL('../', import.meta.url));
@@ -81,6 +81,13 @@ test('conferência HTTP exige conteúdo exato, MIME correto e nenhum redireciona
   await assert.rejects(verifyHealth(base, files, 1000), /divergente/);
   mode = 'redirect';
   await assert.rejects(verifyHealth(base, files, 1000));
+});
+
+test('validação executa o arquivo de teste mesmo quando chamada de outro node:test', async t => {
+  const root = await temporary(t);
+  const failingTest = path.join(root, 'intentional-failure.test.mjs');
+  await fs.writeFile(failingTest, "throw new Error('intentional validation failure');\n");
+  await assert.rejects(run(process.execPath, ['--test', failingTest]), /Node\/testes\/pacote falhou/);
 });
 
 test('Linux: publicação, no-op, falha de teste, rollback HTTP, nova tentativa e isolamento de outras branches', {skip: process.platform !== 'linux'}, async t => {
