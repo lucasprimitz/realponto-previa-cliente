@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="realponto-api-base" content="../api/">
+  <meta name="theme-color" content="#292578">
+  <title>Solicitações de Proposta | Realponto</title>
+  <link rel="icon" type="image/png" href="../assets/realponto-30-anos.png">
+  <link rel="stylesheet" href="./panel.css">
+  <script type="module" src="./panel.mjs"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Ir para o conteúdo</a>
+  <header class="site-header container">
+    <a class="brand" href="../" aria-label="Realponto — voltar ao início">
+      <img src="../assets/realponto-30-anos.png" alt="Grupo Realponto — 30 anos" width="82" height="82">
+      <span>Realponto<small>Solicitações de Proposta</small></span>
+    </a>
+    <div class="header-actions"><span class="restricted-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/></svg>Área restrita</span><button id="logout" class="button secondary" type="button" hidden>Sair</button></div>
+  </header>
+  <main id="main" class="container">
+    <div id="status-message" class="notice" role="status" aria-live="polite">Verificando o acesso…</div>
+    <section id="login-panel" class="login-card" aria-labelledby="login-title" hidden>
+      <div class="lock-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/></svg></div>
+      <span class="eyebrow">ACESSO DA EQUIPE</span>
+      <h1 id="login-title" tabindex="-1">Acompanhe as solicitações.</h1>
+      <p>Entre com a senha de acesso para consultar os contatos e organizar os encaminhamentos.</p>
+      <form id="login-form">
+        <label for="password">Senha de acesso</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="200" aria-describedby="login-help">
+        <p id="login-help" class="hint">A senha é definida pela TI.</p>
+        <button id="login-button" class="button primary" type="submit">Entrar nas solicitações <span aria-hidden="true">→</span></button>
+      </form>
+    </section>
+    <section id="workspace" aria-labelledby="page-title" hidden>
+      <div class="page-heading"><div><span class="eyebrow">ATENDIMENTO REALPONTO</span><h1 id="page-title" tabindex="-1">Solicitações recebidas</h1><p>Confira os dados e registre para quem cada atendimento foi encaminhado.</p></div><div class="count-badge"><strong id="request-count">0</strong><span>solicitações nesta lista</span></div></div>
+      <div id="delivery-notice" class="notice" hidden></div>
+      <div class="toolbar"><div class="filter-field"><label for="status-filter">Mostrar</label><select id="status-filter"><option value="pending">Pendentes</option><option value="all">Todas as solicitações</option><option value="handled">Encaminhadas</option></select></div><button id="refresh" class="button secondary" type="button">Atualizar lista</button></div>
+      <p id="list-status" class="hint" role="status" aria-live="polite"></p>
+      <div id="requests-list" class="requests-list"></div>
+      <div id="empty-list" class="empty-card" hidden><div class="lock-icon" aria-hidden="true">✓</div><h2>Nenhuma solicitação por aqui.</h2><p>Os novos contatos aparecerão nesta área após o envio pelo formulário.</p></div>
+      <nav id="pagination" class="pagination" aria-label="Páginas de solicitações" hidden><button id="previous-page" class="button secondary" type="button">← Anterior</button><span id="page-indicator"></span><button id="next-page" class="button secondary" type="button">Próxima →</button></nav>
+    </section>
+  </main>
+  <footer class="container footer">Realponto · Redução de Jornada</footer>
+  <noscript><p class="container notice">Ative o JavaScript para acessar as solicitações.</p></noscript>
+</body>
+</html>
