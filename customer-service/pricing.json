@@ -1,0 +1,70 @@
+{
+  "pricing": {
+    "baseCents": 80000,
+    "perScheduleCents": 2500,
+    "perEmployeeCents": 220,
+    "bankHoursPercent": 15,
+    "workScalePercent": 10,
+    "secullumPercent": 10
+  },
+  "campaign": {
+    "discountPercent": 30,
+    "deadlineISO": "2026-12-15",
+    "deadlineLabel": "15/12/2026",
+    "timeZone": "America/Sao_Paulo"
+  },
+  "schedules": [
+    10,
+    20,
+    30,
+    40,
+    50,
+    60,
+    70,
+    80,
+    90,
+    100
+  ],
+  "employees": [
+    20,
+    40,
+    60,
+    80,
+    100,
+    150,
+    200,
+    250,
+    300,
+    350,
+    400,
+    450,
+    500,
+    600,
+    700,
+    800,
+    900,
+    1000
+  ],
+  "systems": [
+    {
+      "id": "secullum-offline",
+      "name": "Secullum Offline",
+      "secullum": true
+    },
+    {
+      "id": "secullum-rh",
+      "name": "Secullum RH",
+      "secullum": true
+    },
+    {
+      "id": "rhid",
+      "name": "RHID",
+      "secullum": false
+    },
+    {
+      "id": "iponto",
+      "name": "iPonto",
+      "secullum": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "realponto/customer-requests",
+  "description": "Recebimento de solicitações e painel interno protegido",
+  "type": "project",
+  "require": {
+    "php": ">=8.2",
+    "ext-pdo": "*",
+    "ext-pdo_sqlite": "*",
+    "ext-sodium": "*",
+    "ext-openssl": "*",
+    "phpmailer/phpmailer": "^7.0"
+  },
+  "config": { "sort-packages": true, "allow-plugins": false }
+}
