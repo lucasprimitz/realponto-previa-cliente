@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="realponto-api-base" content="">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="description" content="Prepare seu sistema de ponto para a redução da jornada. Simule a configuração de horários e o reagendamento da sua equipe com a Realponto.">
+  <title>Nova Jornada | Realponto</title>
+  <link rel="icon" href="./assets/realponto-30-anos.png">
+  <link rel="stylesheet" href="./preview.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <svg class="svg-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+    <symbol id="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4M7 8h4m-4 4h8"/></symbol>
+    <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2m1-15a3 3 0 0 1 0 6m3 9v-2a6 6 0 0 0-3-5"/></symbol>
+    <symbol id="calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18M7 15h3m4 0h3m-10 3h3"/></symbol>
+    <symbol id="bank" viewBox="0 0 24 24"><path d="M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4"/></symbol>
+    <symbol id="info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></symbol>
+    <symbol id="shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="edit" viewBox="0 0 24 24"><path d="m15 4 5 5M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14Z"/></symbol>
+  </defs></svg>
+  <a class="skip-link" href="#simulador">Ir para a simulação</a>
+  <div class="preview-ribbon" id="preview-ribbon"><div class="container"><span><i></i> Prévia da página do cliente</span><span>Preenchimento e envio demonstrativos</span></div></div>
+  <header class="site-header container">
+    <a class="brand" href="#inicio" aria-label="Realponto — início"><img src="./assets/realponto-30-anos.png" width="82" height="82" alt="Grupo Realponto — 30 anos"><span class="brand-divider"></span><span>Nova Jornada<span>Seu ponto, preparado.</span></span></a>
+    <nav aria-label="Navegação principal"><a href="#como-funciona">Como funciona</a><a href="#duvidas">Dúvidas frequentes</a><a class="header-cta" href="#simulador">Simular configuração <svg class="icon"><use href="#arrow"/></svg></a></nav>
+  </header>
+  <main id="inicio">
+    <section class="hero container" aria-labelledby="hero-title">
+      <div class="hero-copy"><p class="eyebrow"><span></span> REDUÇÃO DE JORNADA</p><h1 id="hero-title">Uma nova jornada.<br><em>Tudo pronto no seu ponto.</em></h1><p>Planeje a configuração dos novos horários e o reagendamento da sua equipe.<br>Conte um pouco sobre sua empresa e descubra o investimento.</p></div>
+      <aside class="campaign-card" aria-label="Campanha de antecipação"><div class="campaign-top"><span class="offer-tag">Campanha de Antecipação</span><svg class="icon"><use href="#calendar"/></svg></div><div class="offer-value"><strong id="offer-percent">30<span>%</span></strong><span>de desconto<br>na parametrização</span></div><p>Para propostas aprovadas até <strong data-deadline>15/12/2026</strong>.</p></aside>
+    </section>
+    <section class="simulator container" id="simulador" aria-label="Simulação da configuração">
+      <div class="wizard-progress">
+      <div class="wizard-top"><div><span class="tiny-label">SUA CONFIGURAÇÃO, PASSO A PASSO</span><p>Vamos preparar seu sistema?</p></div><span class="progress-caption" id="progress-caption">Etapa 1 de 4</span></div>
+      <ol class="stepper" aria-label="Etapas do formulário">
+        <li class="current"><button type="button" aria-current="step" aria-controls="wizard-step-1"><span class="step-circle" aria-hidden="true">1</span><span>Seu sistema</span><span class="sr-only step-state">Etapa atual</span></button></li>
+        <li><button type="button" aria-controls="wizard-step-2" disabled><span class="step-circle" aria-hidden="true">2</span><span>Quantidades</span><span class="sr-only step-state">Preencha as etapas anteriores para acessar</span></button></li>
+        <li><button type="button" aria-controls="wizard-step-3" disabled><span class="step-circle" aria-hidden="true">3</span><span>Rotina de ponto</span><span class="sr-only step-state">Preencha as etapas anteriores para acessar</span></button></li>
+        <li><button type="button" aria-controls="wizard-step-4" disabled><span class="step-circle" aria-hidden="true">4</span><span>Sua proposta</span><span class="sr-only step-state">Preencha as etapas anteriores para acessar</span></button></li>
+      </ol>
+      <p class="step-navigation-help" id="step-navigation-help" hidden>Clique em uma etapa já preenchida para revisar suas escolhas.</p>
+      </div>
+      <div class="wizard-grid">
+        <section class="price-card proposal-overview" id="quote-overview" aria-labelledby="step-4-title" hidden>
+          <span class="section-kicker">SUA CONFIGURAÇÃO, SEU INVESTIMENTO</span><h2 id="step-4-title" tabindex="-1">Tudo pronto para o próximo passo.</h2>
+          <div id="price-block" hidden aria-live="polite"><div class="price-amount"><p class="price-title" id="price-title">Valor com desconto</p><strong class="final-price" id="final-price"></strong><div class="price-before" id="price-before"><span>Valor sem o desconto da campanha</span><s id="original-price"></s></div></div><div class="price-offer"><span class="discount-label" id="discount-label">30% de antecipação</span><p class="price-saving" id="price-saving"></p><p class="price-condition" id="price-condition"></p></div></div>
+          <div id="custom-quote" class="custom-quote" hidden><span class="tiny-label">UMA CONFIGURAÇÃO ESPECIAL</span><h3>Proposta personalizada</h3><p>Vamos avaliar as quantidades informadas e preparar o valor para a sua empresa. Deixe sua preferência de pagamento e seus dados abaixo.</p></div>
+        </section>
+        <form id="customer-form" novalidate>
+          <div class="form-panel">
+            <section class="wizard-step" id="wizard-step-1" data-step="1" aria-labelledby="step-1-title">
+              <span class="section-kicker">VAMOS COMEÇAR PELO BÁSICO</span><h2 id="step-1-title" tabindex="-1">Qual sistema sua empresa utiliza?</h2><p class="step-description">Selecione o sistema de ponto que receberá as novas configurações.</p>
+              <fieldset class="system-options"><legend class="sr-only">Sistema de ponto</legend>
+                <label class="system-option"><input type="radio" name="system" value="secullum-offline" required><span class="system-card"><span class="system-icon"><svg class="icon"><use href="#monitor"/></svg></span><span><strong>Secullum Offline</strong><small>Sistema de ponto</small></span><span class="radio-dot"></span></span></label>
+                <label class="system-option"><input type="radio" name="system" value="secullum-rh"><span class="system-card"><span class="system-icon"><svg class="icon"><use href="#monitor"/></svg></span><span><strong>Secullum RH</strong><small>Sistema de ponto</small></span><span class="radio-dot"></span></span></label>
+                <label class="system-option"><input type="radio" name="system" value="rhid"><span class="system-card"><span class="system-icon"><svg class="icon"><use href="#monitor"/></svg></span><span><strong>RHID</strong><small>Sistema de ponto</small></span><span class="radio-dot"></span></span></label>
+                <label class="system-option"><input type="radio" name="system" value="iponto"><span class="system-card"><span class="system-icon"><svg class="icon"><use href="#monitor"/></svg></span><span><strong>iPonto</strong><small>Sistema de ponto</small></span><span class="radio-dot"></span></span></label>
+              </fieldset>
+              <details class="quiet-help"><summary>Não sabe qual sistema utiliza?</summary><p>Confira o nome na tela de entrada do seu sistema de ponto ou confirme com o responsável pelo departamento pessoal da sua empresa.</p></details>
+            </section>
+            <section class="wizard-step" id="wizard-step-2" data-step="2" aria-labelledby="step-2-title" hidden>
+              <span class="section-kicker">OLHE PARA A NOVA ROTINA</span><h2 id="step-2-title" tabindex="-1">De quanto sua empresa precisa?</h2><p class="step-description">Considere o que você deseja configurar após a mudança, incluindo as necessidades previstas para sua equipe, como escalas cíclicas ou mensais e também se terá banco de horas.</p>
+              <div class="quantity-fields"><div class="quantity-field"><label for="schedules"><span class="field-icon"><svg class="icon"><use href="#clock"/></svg></span>Horários a cadastrar</label><p id="schedules-help">Quantos modelos de horário deverão ser cadastrados no sistema?</p><select id="schedules" name="schedules" aria-describedby="schedules-help schedules-example" required><option value="">Selecione um pacote</option></select><div class="example" id="schedules-example"><strong>Pense na quantidade que vai precisar.</strong><span>Se hoje você tem 10 horários, mas precisará de 15, escolha o pacote de <b>até 20 horários</b>.</span></div></div>
+              <div class="quantity-field"><label for="employees"><span class="field-icon"><svg class="icon"><use href="#people"/></svg></span>Funcionários a reagendar</label><p id="employees-help">Quantos funcionários receberão os novos horários de trabalho?</p><select id="employees" name="employees" aria-describedby="employees-help employees-example" required><option value="">Selecione um pacote</option></select><div class="example" id="employees-example"><strong>Inclua quem participará da mudança.</strong><span>Se hoje são 100 funcionários e você prevê reagendar 120, selecione <b>até 150 funcionários</b>.</span></div></div></div>
+              <p class="small-note">Precisa de mais de 100 horários ou 1.000 funcionários? Selecione a última opção para solicitar uma proposta personalizada.</p>
+            </section>
+            <section class="wizard-step" id="wizard-step-3" data-step="3" aria-labelledby="step-3-title" hidden>
+              <span class="section-kicker">CADA EMPRESA TEM SEU JEITO</span><h2 id="step-3-title" tabindex="-1">Como funciona sua rotina de ponto?</h2><p class="step-description">Essas informações ajudam a considerar os ajustes necessários na sua configuração.</p>
+              <fieldset class="routine-field"><legend><svg class="icon"><use href="#bank"/></svg>Sua empresa utiliza banco de horas?</legend><p>Marque “Sim” se os saldos de horas também precisarem ser considerados na configuração.</p><div class="choice-pair"><label><input type="radio" name="bankHours" value="yes" required><span><span class="radio-dot"></span>Sim, utiliza</span></label><label><input type="radio" name="bankHours" value="no"><span><span class="radio-dot"></span>Não utiliza</span></label></div></fieldset>
+              <fieldset class="routine-field"><legend><svg class="icon"><use href="#calendar"/></svg>Sua empresa possui escalas?</legend><p>Considere escalas cíclicas ou mensais, com alternância de dias ou horários de trabalho.</p><div class="choice-pair"><label><input type="radio" name="workScale" value="yes" required><span><span class="radio-dot"></span>Sim, possui</span></label><label><input type="radio" name="workScale" value="no"><span><span class="radio-dot"></span>Não possui</span></label></div></fieldset>
+            </section>
+            <section class="wizard-step" id="wizard-step-4" data-step="4" aria-labelledby="contact-title" hidden>
+              <fieldset class="payment-choice" aria-describedby="payment-method-help">
+                <legend>Como prefere pagar?</legend><p class="payment-intro">Selecione a opção desejada para a sua proposta.</p>
+                <div class="payment-cards">
+                  <label class="payment-option pix-option"><input type="radio" name="paymentMethod" value="pix" required aria-describedby="payment-method-help"><span class="payment-card"><span class="payment-card-top"><strong>Pix</strong><span class="radio-dot" aria-hidden="true"></span></span><span class="payment-tag pix-tag">5% de desconto extra</span><strong class="payment-amount" id="pix-price">Valor sob consulta</strong><span class="payment-description">Pagamento à vista</span><span class="pix-saving" id="pix-saving"></span></span></label>
+                  <label class="payment-option"><input type="radio" name="paymentMethod" value="boleto" aria-describedby="payment-method-help"><span class="payment-card"><span class="payment-card-top"><strong>Boleto</strong><span class="radio-dot" aria-hidden="true"></span></span><span class="payment-tag">Sob consulta</span><strong class="payment-amount" id="boleto-price">Em até 6 parcelas</strong><span class="payment-description">Disponibilidade sujeita à análise do cliente.</span></span></label>
+                  <label class="payment-option"><input type="radio" name="paymentMethod" value="credit-card" aria-describedby="payment-method-help"><span class="payment-card"><span class="payment-card-top"><strong>Cartão de crédito</strong><span class="radio-dot" aria-hidden="true"></span></span><span class="payment-tag">10x sem juros</span><strong class="payment-amount" id="card-price">Em 10 parcelas</strong><span class="payment-description">Mais prazo para pagar, sem juros.</span></span></label>
+                </div><p class="payment-help" id="payment-method-help">Parcelas com valores aproximados por arredondamento. As condições serão confirmadas na proposta.</p>
+              </fieldset>
+              <div class="contact-heading"><span class="section-kicker">FALTA SÓ NOS CONHECERMOS</span><h2 id="contact-title">Para quem vamos preparar a proposta?</h2><p class="step-description">Deixe seus dados para a equipe Realponto confirmar as informações e dar continuidade ao atendimento.</p></div>
+              <div class="contact-fields">
+                <div><label for="contact-name">Seu nome</label><input id="contact-name" name="contactName" autocomplete="name" placeholder="Como podemos chamar você?" maxlength="120" required></div>
+                <div><label for="company">Empresa</label><input id="company" name="company" autocomplete="organization" placeholder="Nome da sua empresa" maxlength="180" required></div>
+                <div><label for="email">E-mail</label><input id="email" name="email" type="email" autocomplete="email" placeholder="voce@empresa.com.br" maxlength="254" required></div>
+                <div><label for="phone">Telefone / WhatsApp</label><input id="phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="(11) 99999-9999" maxlength="32" required></div>
+                <div><label for="tax-id">CPF / CNPJ <span class="optional-label">(opcional)</span></label><input id="tax-id" name="taxId" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CPF ou CNPJ do cadastro" maxlength="40" aria-describedby="tax-id-help"><p class="field-help" id="tax-id-help">Se já tiver cadastro, informe o documento para facilitar a localização.</p></div>
+              </div>
+              <label class="contact-permission"><input type="checkbox" id="contact-permission" required><span>Autorizo o contato da Realponto para tratar desta solicitação.</span></label>
+              <div class="preview-note" id="submission-note"><svg class="icon"><use href="#info"/></svg><p><strong>Você está testando uma prévia.</strong> Use dados fictícios. O envio abaixo é demonstrativo e não encaminha informações para a Realponto.</p></div>
+            </section>
+            <p class="form-error" id="form-error" role="alert" hidden></p>
+            <div class="wizard-actions"><button class="button back-button" type="button" id="back-button" hidden><svg class="icon"><use href="#arrow"/></svg>Voltar</button><span class="step-footnote" id="step-footnote">Você pode revisar suas escolhas antes de enviar.</span><button class="button primary-button" type="submit" id="next-button">Continuar <svg class="icon"><use href="#arrow"/></svg></button></div>
+          </div>
+          <section class="success-panel" id="success-panel" aria-labelledby="success-title" hidden><span class="success-icon"><svg class="icon"><use href="#check"/></svg></span><span class="section-kicker" id="success-kicker">PRÉVIA CONCLUÍDA</span><h2 id="success-title" tabindex="-1">Pronto. Esse será o próximo passo!</h2><p id="success-description">Na versão publicada, sua solicitação será registrada para a equipe Realponto acompanhar e entrar em contato.</p><div class="request-preview"><h3>Dados da solicitação</h3><dl id="request-preview-data"></dl></div><div class="preview-note"><svg class="icon"><use href="#info"/></svg><p id="success-note">Neste teste, os dados foram reunidos apenas nesta tela. Nenhuma informação foi enviada ou salva.</p></div><button type="button" class="button primary-button" id="restart-button">Revisar simulação <svg class="icon"><use href="#arrow"/></svg></button></section>
+        </form>
+        <aside class="quote-aside" aria-label="Resumo e escopo da configuração">
+          <details class="summary-card" id="configuration-summary" open>
+            <summary class="summary-heading"><span class="summary-icon"><svg class="icon"><use href="#monitor"/></svg></span><span><span class="tiny-label">DO SEU JEITO</span><strong>Sua configuração</strong><span class="summary-hint">Resumo das suas escolhas</span></span><span class="summary-chevron" aria-hidden="true">⌄</span></summary>
+          <dl class="summary-list"><div><dt>Sistema</dt><dd id="summary-system">A selecionar</dd></div><div><dt>Horários</dt><dd id="summary-schedules">A selecionar</dd></div><div><dt>Funcionários</dt><dd id="summary-employees">A selecionar</dd></div><div><dt>Banco de horas</dt><dd id="summary-bank">A informar</dd></div><div><dt>Escalas</dt><dd id="summary-scale">A informar</dd></div></dl>
+          <button type="button" class="edit-button" id="edit-button" hidden><svg class="icon"><use href="#edit"/></svg>Revisar escolhas</button>
+          </details>
+          <div class="quote-placeholder" id="quote-placeholder"><svg class="icon"><use href="#clock"/></svg><p>Seu investimento será exibido ao continuar para a etapa Sua proposta.</p></div>
+          <div class="included"><p>O serviço contempla</p><ul><li><svg class="icon"><use href="#check"/></svg>Cadastro dos novos horários</li><li id="scope-retire-schedules" hidden><svg class="icon"><use href="#check"/></svg>Inativação dos horários antigos</li><li><svg class="icon"><use href="#check"/></svg>Reagendamento dos funcionários</li><li><svg class="icon"><use href="#check"/></svg>Ajustes conforme suas escolhas</li></ul><p class="estimate-note">Estimativa sujeita à confirmação do escopo pela equipe Realponto.</p></div>
+        </aside>
+      </div>
+    </section>
+    <section class="how-section container" id="como-funciona" aria-labelledby="how-title">
+      <div class="section-heading"><div><p class="eyebrow">DO PLANEJAMENTO À CONFIGURAÇÃO</p><h2 id="how-title">Sua nova rotina, bem planejada.</h2></div><p>Entenda o que acontece depois da simulação.</p></div>
+      <ol class="how-steps">
+        <li><span>01</span><h3>Conte o que precisa</h3><p>Selecione seu sistema e o tamanho da configuração que deseja realizar.</p></li>
+        <li><span>02</span><h3>Alinhe com nossa equipe</h3><p>Conferimos o escopo, a proposta e a data de implantação com você.</p></li>
+        <li><span>03</span><h3>Prepare a nova rotina</h3><p>Realizamos a configuração dos horários e o reagendamento conforme o combinado.</p></li>
+      </ol>
+    </section>
+    <section class="faq-section container" id="duvidas" aria-labelledby="faq-title"><div><p class="eyebrow">PODEMOS AJUDAR</p><h2 id="faq-title">Algumas respostas<br> antes do próximo passo.</h2><p>Uma configuração bem planejada começa com as informações certas.</p></div><div class="faq-list"><details><summary>O que conta como um horário?</summary><p>É cada modelo de horário que será cadastrado no sistema. Vários funcionários podem usar o mesmo horário ou escala. Informe quantos modelos serão necessários na nova rotina.</p></details><details><summary>Devo considerar a equipe atual ou a que será reagendada?</summary><p>Selecione o pacote que comporte todos os funcionários que você deseja incluir no serviço. Se hoje são 100, mas você pretende reagendar 120, escolha a opção de até 150 funcionários.</p></details><details><summary>Como funciona o desconto de antecipação?</summary><p>A campanha oferece <span data-campaign-percent>30%</span> sobre o total da parametrização para propostas aprovadas até <strong data-deadline>15/12/2026</strong>. Preencher a simulação não equivale à aprovação. Após o prazo, aplica-se o valor sem o desconto da campanha.</p></details><details><summary>O que acontece após o preenchimento?</summary><p>Após o preenchimento e envio da solicitação, um analista da Realponto entrará em contato para confirmar e validar as informações. Se necessário, poderá ser realizado um acesso remoto para essa validação. Em seguida, seguiremos com a configuração no sistema.</p></details><details><summary>Quais são as opções de pagamento?</summary><p>Você pode optar por pagamento no Pix com 5% de desconto adicional, boleto em 6 parcelas sob consulta ou cartão de crédito em 10 vezes sem juros. A disponibilidade do boleto está sujeita à análise do cliente. As condições serão confirmadas na proposta.</p></details></div></section>
+  </main>
+  <footer class="site-footer"><div class="container"><span><strong>REALPONTO</strong><span>Seu ponto, preparado para a nova jornada.</span></span><p>Grupo Realponto · Parametrização de sistemas de ponto</p></div></footer>
+</body>
+</html>
+
+
+
+
