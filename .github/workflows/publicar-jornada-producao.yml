@@ -112,6 +112,22 @@ jobs:
           printf '%s\n' "$HG_SSH_KEY" > "$HOME/.ssh/jornada_deploy"
           printf '%s\n' "$HG_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/jornada_deploy" "$HOME/.ssh/known_hosts"
+          # Confirma que estamos usando o IP correto da HostGator
+          if [[ "$HG_SSH_HOST" != "192.185.217.14" ]]; then
+          echo "::error::JORNADA_SSH_HOST diferente do IP esperado."
+          exit 1
+          fi
+
+          echo "[OK] Host SSH correto."
+
+          # Confirma que a chave ED25519 existe para o host e a porta
+          if ssh-keygen -F "[$HG_SSH_HOST]:$HG_SSH_PORT" \
+          -f "$HOME/.ssh/known_hosts" | grep -q ' ssh-ed25519 '; then
+          echo "[OK] Chave ED25519 encontrada para o host e porta."
+          else
+          echo "::error::Chave ED25519 nao corresponde ao host e porta."
+          exit 1
+          fi
           echo "Conexão SSH preparada com verificação rigorosa da chave do servidor."
       - name: Transferir pacote e executar instalador privado
         env:
