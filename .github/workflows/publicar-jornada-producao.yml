@@ -113,7 +113,7 @@ jobs:
           printf '%s\n' "$HG_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/jornada_deploy" "$HOME/.ssh/known_hosts"
           # Confirma que estamos usando o IP correto da HostGator
-          if [[ "$HG_SSH_HOST" != "192.185.217.14" ]]; then
+          if [[ "$HG_SSH_HOST" != "192.185.176.77" ]]; then
           echo "::error::JORNADA_SSH_HOST diferente do IP esperado."
           exit 1
           fi
