@@ -1,0 +1,132 @@
+name: Atualizar Jornada funcional na HostGator
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: 'Verificar gera o pacote; Publicar transfere e ativa depois dos testes.'
+        type: choice
+        options: [verificar, publicar]
+        required: true
+        default: verificar
+
+permissions:
+  contents: read
+concurrency:
+  group: jornada-funcional-producao
+  cancel-in-progress: false
+
+jobs:
+  validar-e-empacotar:
+    # Não confundir com o workflow da prévia estática.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Obter o commit exato
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Preparar Node 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Validar precos e JavaScript
+        run: |
+          set -euo pipefail
+          node scripts/check-pricing-sync.mjs
+          npm test
+      - name: Dependencias SMTP travadas pelo composer.lock
+        run: |
+          set -euo pipefail
+          php -v
+          composer install --working-dir=customer-service --no-dev --no-interaction --no-progress --no-plugins --no-scripts --prefer-dist --optimize-autoloader
+      - name: Testar recebimento e valores PHP
+        run: npm run test:contacts
+      - name: Validar scripts de implantação
+        run: |
+          node --check scripts/build-jornada-deploy.mjs
+          bash -n deploy/bin/deploy-jornada.sh
+          php -l deploy/patches/Store.php
+      - name: Montar pacote funcional da Jornada
+        run: |
+          set -euo pipefail
+          DEST="$RUNNER_TEMP/jornada-payload"
+          node scripts/build-jornada-deploy.mjs "$DEST" "$GITHUB_SHA"
+          (cd "$DEST" && sha256sum --check --status SHA256SUMS)
+          find "$DEST/private/app" -type f -name '*.php' -print0 | xargs -0 -n1 php -l >/dev/null
+          find "$DEST/public/api" -type f -name '*.php' -print0 | xargs -0 -n1 php -l >/dev/null
+          test -f "$DEST/private/app/vendor/autoload.php"
+          test -f "$DEST/public/request-transport.mjs"
+          test ! -e "$DEST/public/.htaccess"
+          test ! -e "$DEST/public/api/_bootstrap.php"
+          test ! -e "$DEST/private/config.php"
+          test ! -e "$DEST/private/data"
+          tar -C "$DEST" -czf "$RUNNER_TEMP/jornada-$GITHUB_SHA.tar.gz" .
+          sha256sum "$RUNNER_TEMP/jornada-$GITHUB_SHA.tar.gz" | cut -d' ' -f1 > "$RUNNER_TEMP/jornada-archive.sha256"
+          echo "Arquivo gerado do commit $GITHUB_SHA (não foi publicado nesta etapa)."
+      - name: Guardar pacote para auditoria e rollback
+        uses: actions/upload-artifact@v7
+        with:
+          name: jornada-funcional-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/jornada-${{ github.sha }}.tar.gz
+            ${{ runner.temp }}/jornada-archive.sha256
+          retention-days: 14
+          if-no-files-found: error
+
+  publicar:
+    needs: validar-e-empacotar
+    # Por padrão, push em main SÓ testa. Ative JORNADA_AUTO_DEPLOY=true
+    # depois de uma execução manual bem-sucedida e da autorização do responsável.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.modo == 'publicar') ||
+      (github.event_name == 'push' && vars.JORNADA_AUTO_DEPLOY == 'true')
+    environment: jornada-producao
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Baixar o pacote validado deste mesmo commit
+        uses: actions/download-artifact@v7
+        with:
+          name: jornada-funcional-${{ github.sha }}
+          path: ${{ runner.temp }}/revisado
+      - name: Preparar SSH com chave e host verificado
+        env:
+          HG_SSH_HOST: ${{ secrets.JORNADA_SSH_HOST }}
+          HG_SSH_USER: ${{ secrets.JORNADA_SSH_USER }}
+          HG_SSH_PORT: ${{ vars.JORNADA_SSH_PORT || '2222' }}
+          HG_SSH_KEY: ${{ secrets.JORNADA_SSH_PRIVATE_KEY }}
+          HG_SSH_KNOWN_HOSTS: ${{ secrets.JORNADA_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          for v in HG_SSH_HOST HG_SSH_USER HG_SSH_KEY HG_SSH_KNOWN_HOSTS; do
+            test -n "${!v}" || { echo "Falta Secret $v"; exit 1; }
+          done
+          [[ "$HG_SSH_PORT" =~ ^[0-9]{2,5}$ ]] || exit 1
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$HG_SSH_KEY" > "$HOME/.ssh/jornada_deploy"
+          printf '%s\n' "$HG_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/jornada_deploy" "$HOME/.ssh/known_hosts"
+          echo "Conexão SSH preparada com verificação rigorosa da chave do servidor."
+      - name: Transferir pacote e executar instalador privado
+        env:
+          HG_SSH_HOST: ${{ secrets.JORNADA_SSH_HOST }}
+          HG_SSH_USER: ${{ secrets.JORNADA_SSH_USER }}
+          HG_SSH_PORT: ${{ vars.JORNADA_SSH_PORT || '2222' }}
+        run: |
+          set -euo pipefail
+          SSH=(ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -i "$HOME/.ssh/jornada_deploy" -p "$HG_SSH_PORT")
+          SCP=(scp -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -i "$HOME/.ssh/jornada_deploy" -P "$HG_SSH_PORT")
+          REMOTE="${HG_SSH_USER}@${HG_SSH_HOST}"
+          ARCHIVE="$RUNNER_TEMP/revisado/jornada-$GITHUB_SHA.tar.gz"
+          DIGEST="$(cat "$RUNNER_TEMP/revisado/jornada-archive.sha256")"
+          [[ "$DIGEST" =~ ^[a-f0-9]{64}$ ]] || exit 1
+          echo "$DIGEST  $ARCHIVE" | sha256sum -c --status
+          "${SSH[@]}" "$REMOTE" 'test -f "$HOME/realponto-cliente/deploy/bin/deploy-jornada.sh" && test -f "$HOME/realponto-cliente/config.php" && test -f "$HOME/public_html/jornada/api/_bootstrap.php" && mkdir -p "$HOME/realponto-cliente/deploy/incoming"'
+          "${SCP[@]}" "$ARCHIVE" "$REMOTE:realponto-cliente/deploy/incoming/jornada-$GITHUB_SHA.tar.gz"
+          "${SSH[@]}" "$REMOTE" "bash \"\$HOME/realponto-cliente/deploy/bin/deploy-jornada.sh\" '$GITHUB_SHA' '$DIGEST'"
