@@ -58,6 +58,61 @@ foreach ($fixtures as $fixture) {
     check($actual['totalCents'] === ($expected['cents'] ?? null), 'Preço divergente entre PHP e JS.');
     check($actual['campaignDiscountApplied'] === ($expected['discountApplied'] ?? false), 'Campanha divergente entre PHP e JS.');
 }
+
+// Modelos de e-mail: dados seguros, estimativas condicionais e alternativa em texto.
+$mailItem = ['id' => 'RP-EXEMPLO-20261030', 'receivedAt' => '2026-10-30T18:39:49Z', 'request' => $request];
+$html = Mail::html($mailItem);
+check(str_contains($html, 'Cliente de Teste') && str_contains($html, 'Empresa de Teste'), 'E-mail HTML deve preservar o contato.');
+check(str_contains($html, Mail::money($request['estimate']['totalCents'])), 'E-mail deve usar a estimativa registrada.');
+check(str_contains($html, '30/10/2026') && str_contains($html, '15:39'), 'Recebimento deve ser legível no horário de São Paulo.');
+check(!str_contains($html, '/contatos/') && !str_contains($html, 'Abrir painel') && !str_contains(Mail::body($mailItem), 'painel protegido'), 'E-mail encaminhável não deve incluir acesso ao painel.');
+check(!str_contains($html, '<script') && !str_contains($html, '<iframe'), 'E-mail não pode conter conteúdo ativo.');
+$unsafeItem = $mailItem;
+$unsafeItem['id'] = '<script>alert(1)</script>';
+$unsafeItem['request']['contact']['name'] = '<img src=x onerror="alert(1)">';
+$unsafeItem['request']['contact']['company'] = 'Empresa & Filhos <b>Teste</b>';
+$unsafeItem['request']['payment']['label'] = '<iframe src="https://example.invalid"></iframe>';
+$escaped = Mail::html($unsafeItem);
+foreach (['<script', '<img src=x', '<b>Teste</b>', '<iframe'] as $payload) check(!str_contains($escaped, $payload), 'Dados do formulário precisam ser escapados no HTML.');
+check(str_contains($escaped, '&lt;') && str_contains($escaped, '&amp;'), 'HTML deve exibir os dados como texto.');
+foreach (['secullum-offline', 'secullum-rh', 'rhid', 'iponto'] as $system) {
+    foreach (array_keys(Domain::PAYMENTS) as $method) {
+        foreach ([10, 'consultar'] as $schedules) {
+            $sample = $input;
+            $sample['configuration']['system'] = $system;
+            $sample['configuration']['schedules'] = $schedules;
+            $sample['payment']['method'] = $method;
+            $sample['contact']['taxId'] = null;
+            $renderItem = $mailItem;
+            $renderItem['request'] = $domain->normalize($sample, $now);
+            $rendered = Mail::html($renderItem);
+            $plain = Mail::body($renderItem);
+            check(str_contains($rendered, htmlspecialchars(Domain::PAYMENTS[$method], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')), 'Forma escolhida deve acompanhar a solicitação.');
+            check(str_contains($plain, Domain::PAYMENTS[$method]), 'Alternativa de texto deve manter a forma escolhida.');
+            check(str_contains($rendered, 'Não informado'), 'Documento opcional ausente deve ficar legível.');
+            if ($schedules === 'consultar') {
+                check(str_contains($rendered, 'Sob consulta') && !str_contains($rendered, 'R$ 0,00'), 'Consulta personalizada não pode inventar preço zero.');
+                check(!str_contains($plain, '6x de Sob consulta') && !str_contains($plain, '10x de Sob consulta'), 'Consulta personalizada não pode simular parcelas inexistentes.');
+            } else {
+                $amountField = ['pix' => 'pixCents', 'boleto' => 'boletoInstallmentCents', 'credit-card' => 'cardInstallmentCents'][$method];
+                $chosenAmount = Mail::money($renderItem['request']['estimate'][$amountField]);
+                check(str_contains($rendered, $chosenAmount) && str_contains($plain, $chosenAmount), 'Pagamento escolhido deve usar os centavos calculados pelo servidor.');
+            }
+            foreach (['pix' => 'Pix', 'boleto' => 'Boleto', 'credit-card' => 'Cartão de crédito'] as $otherMethod => $otherTitle) {
+                check(str_contains($rendered, $otherTitle) && str_contains($plain, $otherTitle), 'E-mail deve manter as alternativas de pagamento para consulta.');
+                if ($otherMethod === $method) check(str_contains($plain, '[ESCOLHIDO PELO CLIENTE] ' . $otherTitle . ':'), 'Alternativa em texto deve identificar a escolha do cliente.');
+            }
+            check(substr_count($rendered, 'ESCOLHIDO PELO CLIENTE') === 1 && substr_count($plain, '[ESCOLHIDO PELO CLIENTE]') === 1, 'Somente uma opção deve ser destacada.');
+            check(str_contains($rendered, $system === 'secullum-offline' ? 'Não contemplada' : 'Contemplada'), 'Escopo deve respeitar o sistema escolhido.');
+        }
+    }
+}
+$expiredItem = $mailItem;
+$expiredItem['request'] = $domain->normalize($input, $now->modify('+1 day'));
+check(str_contains(Mail::html($expiredItem), Mail::money($expiredItem['request']['estimate']['totalCents'])), 'Campanha encerrada deve apresentar o total do registro.');
+$invalidDateItem = $mailItem; $invalidDateItem['receivedAt'] = 'data-invalida';
+check(Mail::html($invalidDateItem) !== '' && Mail::body($invalidDateItem) !== '', 'Registro com data inesperada não pode interromper a entrega.');
+
 echo "OK: {$checks} verificações; " . count($fixtures) . " cenários de preço; nenhum e-mail real enviado.\n";
 // Arquivos temporários exclusivos do teste, sem remoção recursiva de caminhos externos.
 $store = null; unset($mail); gc_collect_cycles();
