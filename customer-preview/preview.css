@@ -185,15 +185,17 @@ select{cursor:pointer}
 .custom-quote h3{font-size:23px;color:var(--blue);margin:12px 0}
 .custom-quote p{font-size:15px;line-height:1.65;color:var(--muted);margin-bottom:0}
 .success-panel{text-align:center;padding:40px 30px}
-.success-icon{display:grid;place-items:center;width:64px;height:64px;background:#eeebfb;color:var(--blue);border-radius:50%;margin:0 auto 25px}
+.success-icon{display:grid;place-items:center;width:64px;height:64px;background:#e7f5ec;color:#1b7d4e;border:1px solid #c2e5ce;border-radius:50%;margin:0 auto 20px}
 .success-icon .icon{height:34px;width:34px}
 .success-panel>p{font-size:16px;line-height:1.7;color:var(--muted);max-width:480px;margin:17px auto}
-.request-preview{text-align:left;background:var(--soft);border:1px solid var(--border);border-radius:14px;padding:20px;margin-top:24px}
-.request-preview h3{font-size:17px;margin:0 0 15px;color:var(--blue-deep)}
-.request-preview dl{margin:0;display:grid;gap:13px}
-.request-preview dl>div{display:flex;justify-content:space-between;align-items:baseline;gap:20px;font-size:14px;line-height:1.6}
-.request-preview dt{color:var(--muted)}
-.request-preview dd{margin:0;font-weight:600;text-align:right;max-width:65%;overflow-wrap:anywhere}
+.request-preview{text-align:left;background:var(--soft);border:1px solid var(--border);border-radius:14px;padding:22px 24px;margin:24px auto 0;max-width:720px}
+.request-preview h3{font-size:18px;margin:0 0 6px;color:var(--blue-deep)}
+.request-preview dl{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:28px}
+.request-preview dl>div{min-width:0;padding:14px 0;border-bottom:1px solid var(--border);line-height:1.5}
+.request-preview .request-detail-wide{grid-column:1/-1}
+.request-preview dl>div:nth-last-child(-n+2){border-bottom:0;padding-bottom:0}
+.request-preview dt{color:var(--muted);font-size:13px}
+.request-preview dd{margin:5px 0 0;font-size:15px;font-weight:600;text-align:left;overflow-wrap:anywhere}
 .success-panel .button{margin:25px auto 0}
 .success-panel .preview-note{text-align:left}
 
@@ -381,6 +383,9 @@ select{cursor:pointer}
  .success-panel{padding:35px 23px}
  .success-panel h2{font-size:25px}
  .success-panel>p{font-size:16px}
+ .request-preview{padding:18px}
+ .request-preview dl{grid-template-columns:1fr}
+ .request-preview dl>div:nth-last-child(2){border-bottom:1px solid var(--border);padding-bottom:14px}
 }
 @media(max-width:380px){
  .campaign-card{display:block}
