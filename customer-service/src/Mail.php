@@ -21,6 +21,13 @@ final class Mail {
         if (!in_array(strlen($digits), [10, 11], true)) return $value;
         return $prefix . '(' . substr($digits, 0, 2) . ') ' . substr($digits, 2, -4) . '-' . substr($digits, -4);
     }
+    private static function document(?string $value): string {
+        if ($value === null || trim($value) === '') return 'Não informado';
+        $normalized = strtoupper(preg_replace('~[.\/\-\s]~u', '', $value));
+        if (preg_match('/^\d{11}$/D', $normalized)) return substr($normalized, 0, 3) . '.' . substr($normalized, 3, 3) . '.' . substr($normalized, 6, 3) . '-' . substr($normalized, 9);
+        if (preg_match('/^[A-Z0-9]{12}\d{2}$/D', $normalized)) return substr($normalized, 0, 2) . '.' . substr($normalized, 2, 3) . '.' . substr($normalized, 5, 3) . '/' . substr($normalized, 8, 4) . '-' . substr($normalized, 12);
+        return $value;
+    }
     private static function details(array $item): array {
         $r = $item['request']; $c = $r['configuration']; $p = $r['contact'];
         $systems = ['secullum-offline' => 'Secullum Offline', 'secullum-rh' => 'Secullum RH', 'rhid' => 'RHID', 'iponto' => 'iPonto'];
@@ -28,7 +35,7 @@ final class Mail {
             ? 'Acima de ' . number_format($limit, 0, ',', '.') . ' ' . $noun . ' — sob consulta'
             : 'Até ' . number_format((int)$value, 0, ',', '.') . ' ' . $noun;
         return [
-            'contact' => ['Nome' => $p['name'], 'Empresa' => $p['company'], 'E-mail' => $p['email'], 'Telefone / WhatsApp' => self::telephone($p['phone']), 'CPF / CNPJ' => ($p['taxId'] ?? '') !== '' ? $p['taxId'] : 'Não informado'],
+            'contact' => ['Nome' => $p['name'], 'Empresa' => $p['company'], 'E-mail' => $p['email'], 'Telefone / WhatsApp' => self::telephone($p['phone']), 'CPF / CNPJ' => self::document($p['taxId'] ?? null)],
             'configuration' => ['Sistema' => $systems[$c['system']] ?? $c['system'], 'Horários' => $quantity($c['schedules'], 'horários', 100), 'Funcionários' => $quantity($c['employees'], 'funcionários', 1000), 'Banco de horas' => $c['bankHours'] ? 'Sim' : 'Não', 'Escalas' => $c['workScale'] ? 'Sim' : 'Não', 'Inativação dos horários antigos' => $c['system'] === 'secullum-offline' ? 'Não contemplada para Secullum Offline' : 'Contemplada'],
         ];
     }

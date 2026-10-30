@@ -28,10 +28,15 @@ final class Domain {
         $phone = self::text($contact['phone'] ?? null, 'telefone', 10, 32);
         if (!preg_match('/^[+()0-9 .-]+$/D', $phone) || strlen(preg_replace('/\D/', '', $phone)) < 10 || strlen(preg_replace('/\D/', '', $phone)) > 13) throw new Problem(422, 'Informe um telefone válido com DDD.');
         $taxId = $contact['taxId'] ?? null;
-        if ($taxId !== null && $taxId !== '') {
-            $taxId = strtoupper(preg_replace('~[.\/\-\s]~u', '', self::text($taxId, 'CPF / CNPJ', 1, 40)));
-            if (!preg_match('/^(?:\d{11}|[A-Z0-9]{12}\d{2})$/D', $taxId)) throw new Problem(422, 'Informe um CPF ou CNPJ completo ou deixe em branco.');
-        } else $taxId = null;
+        if ($taxId !== null) {
+            $taxId = self::text($taxId, 'CPF / CNPJ', 0, 40);
+            if ($taxId === '') $taxId = null;
+            else {
+                // Documento é uma referência opcional: formato incorreto não impede o contato.
+                $normalizedTaxId = strtoupper(preg_replace('~[.\/\-\s]~u', '', $taxId));
+                $taxId = $normalizedTaxId !== '' ? $normalizedTaxId : $taxId;
+            }
+        }
         $system = null;
         foreach ($this->catalog['systems'] as $candidate) if (($configuration['system'] ?? null) === $candidate['id']) $system = $candidate;
         if (!$system) throw new Problem(422, 'Selecione um sistema válido.');

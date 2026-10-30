@@ -1,5 +1,5 @@
 import {SYSTEMS, SCHEDULES, EMPLOYEES, CAMPAIGN, calculateCustomerQuote, paymentOptions, paymentDisplay, formatMoney, formatNumber} from './customer-model.mjs';
-import {PAYMENT_METHODS, isTaxIdFormatValid, buildCustomerRequest} from './customer-request.mjs';
+import {PAYMENT_METHODS, buildCustomerRequest, formatPhone, formatTaxId} from './customer-request.mjs';
 import {createRequestTransport} from './request-transport.mjs';
 
 const form = document.querySelector('#customer-form');
@@ -41,6 +41,50 @@ function fillSelect(id, values, noun, customLabel) {
 }
 fillSelect('#schedules', SCHEDULES, 'horários', 'Mais de 100 horários');
 fillSelect('#employees', EMPLOYEES, 'funcionários', 'Mais de 1.000 funcionários');
+
+
+// Preserve the cursor when punctuation is inserted or an existing value is edited.
+function bindContactMask(input, format) {
+  const meaningful = character => /[A-Za-z0-9]/.test(character ?? '');
+  const apply = () => {
+    const previous = input.value;
+    const caret = input.selectionStart ?? previous.length;
+    const count = [...previous.slice(0, caret)].filter(meaningful).length;
+    const formatted = format(previous);
+    if (formatted === previous) return;
+    input.value = formatted;
+    if (document.activeElement !== input) return;
+    let position = 0;
+    let seen = 0;
+    while (position < formatted.length && seen < count) {
+      if (meaningful(formatted[position])) seen++;
+      position++;
+    }
+    if (caret === previous.length) position = formatted.length;
+    input.setSelectionRange(position, position);
+  };
+  input.addEventListener('input', event => { if (!event.isComposing) apply(); });
+  input.addEventListener('compositionend', apply);
+  input.addEventListener('blur', apply);
+  input.addEventListener('beforeinput', event => {
+    if (event.isComposing || input.selectionStart !== input.selectionEnd) return;
+    const backward = event.inputType === 'deleteContentBackward';
+    if (!backward && event.inputType !== 'deleteContentForward') return;
+    let position = (input.selectionStart ?? 0) - (backward ? 1 : 0);
+    if (position < 0 || position >= input.value.length || meaningful(input.value[position])) return;
+    // Deleting a separator should remove the adjacent digit, not reinsert the separator forever.
+    while (position >= 0 && position < input.value.length && !meaningful(input.value[position])) position += backward ? -1 : 1;
+    if (position < 0 || position >= input.value.length) return;
+    event.preventDefault();
+    input.value = input.value.slice(0, position) + input.value.slice(position + 1);
+    input.setSelectionRange(position, position);
+    apply();
+    input.dispatchEvent(new Event('input', {bubbles: true}));
+  });
+  apply();
+}
+bindContactMask(form.elements.phone, formatPhone);
+bindContactMask(form.elements.taxId, formatTaxId);
 
 function selected(name) { return form.elements.namedItem(name).value; }
 function selections() {
@@ -121,14 +165,15 @@ function renderRequestPreview(request, receipt) {
   const rows = [
     ['Nome', request.contact.name],
     ['Empresa', request.contact.company],
-    ['CPF / CNPJ', request.contact.taxId ?? 'Não informado'],
+    ['CPF / CNPJ', request.contact.taxId ? formatTaxId(request.contact.taxId) : 'Não informado'],
     ['E-mail', request.contact.email],
-    ['Telefone / WhatsApp', request.contact.phone],
+    ['Telefone / WhatsApp', formatPhone(request.contact.phone)],
     ['Pagamento desejado', request.payment.label],
   ];
-  if (receipt && !receipt.demo) rows.unshift(['Protocolo', receipt.id]);
-  document.querySelector('#request-preview-data').replaceChildren(...rows.map(([label, value]) => {
+  if (receipt && !receipt.demo) rows.unshift(['Protocolo', receipt.id, 'request-detail-wide']);
+  document.querySelector('#request-preview-data').replaceChildren(...rows.map(([label, value, className]) => {
     const row = document.createElement('div');
+    if (className) row.className = className;
     const title = document.createElement('dt');
     const description = document.createElement('dd');
     title.textContent = label;
@@ -166,7 +211,6 @@ function stepIssue(step) {
     if (!email.value.trim() || !email.validity.valid) return issue('Informe um endereço de e-mail válido.', email);
     const digits = phone.value.replace(/\D/g, '');
     if (digits.length < 10 || digits.length > 13) return issue('Informe um telefone com DDD, incluindo o código do país se necessário.', phone);
-    if (!isTaxIdFormatValid(form.elements.taxId.value)) return issue('Informe um CPF ou CNPJ completo, ou deixe o campo em branco.', form.elements.taxId);
     if (!PAYMENT_METHODS.some(method => method.id === selected('paymentMethod'))) return issue('Selecione a forma de pagamento desejada.', form.querySelector('[name="paymentMethod"]'));
     const permission = document.querySelector('#contact-permission');
     if (!permission.checked) return issue('Marque a autorização de contato para continuar.', permission);
