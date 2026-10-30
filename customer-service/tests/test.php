@@ -21,7 +21,27 @@ check($request['estimate']['totalCents'] === $expectedTotal, 'O preço do navega
 check($request['createdAt'] === $now->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z'), 'O servidor deve definir a data.');
 check($request['payment']['label'] === Domain::PAYMENTS['pix'], 'Rótulo de pagamento deve vir do servidor.');
 check($request['contact']['taxId'] === '12345678909', 'Documento deve ser normalizado.');
-foreach (['email' => "a@example.invalid\r\nBcc: evil@example.invalid", 'phone' => 'telefone', 'taxId' => '123', 'name' => str_repeat('a', 121)] as $key => $value) { $bad = $input; $bad['contact'][$key] = $value; problem(fn() => $domain->normalize($bad), 422); }
+foreach ([
+    [null, null], ['', null], ['   ', null],
+    ['123', '123'], ['12345678900', '12345678900'], ['123456789012345', '123456789012345'],
+    ['12.abc.345/01de-67', '12ABC34501DE67'], ['12.abc.345/01de-ab', '12ABC34501DEAB'],
+    [' nao informado ', 'NAOINFORMADO'], ['123?abc', '123?ABC'], ['...', '...'],
+    [str_repeat('a', 40), str_repeat('A', 40)],
+] as [$document, $expectedDocument]) {
+    $sample = $input; $sample['contact']['taxId'] = $document;
+    check($domain->normalize($sample, $now)['contact']['taxId'] === $expectedDocument, 'Documento opcional, incompleto ou malformado deve ser aceito sem apagar o dado.');
+}
+foreach ([str_repeat('a', 41), "123\n456", "123\0abc", "\xFF", 123, ['123']] as $document) {
+    $bad = $input; $bad['contact']['taxId'] = $document;
+    problem(fn() => $domain->normalize($bad), 422);
+}
+foreach (['', '123', 'telefone', null] as $phone) {
+    $bad = $input; $bad['contact']['phone'] = $phone;
+    problem(fn() => $domain->normalize($bad), 422);
+}
+$withoutDocument = $input; unset($withoutDocument['contact']['taxId']);
+check($domain->normalize($withoutDocument, $now)['contact']['taxId'] === null, 'Documento ausente não pode impedir o envio.');
+foreach (['email' => "a@example.invalid\r\nBcc: evil@example.invalid", 'name' => str_repeat('a', 121)] as $key => $value) { $bad = $input; $bad['contact'][$key] = $value; problem(fn() => $domain->normalize($bad), 422); }
 $bad = $input; $bad['configuration']['bankHours'] = 'false'; problem(fn() => $domain->normalize($bad), 422);
 $bad = $input; $bad['configuration']['schedules'] = 11; problem(fn() => $domain->normalize($bad), 422);
 $bad = $input; $bad['configuration']['system'] = 'x'; problem(fn() => $domain->normalize($bad), 422);
@@ -48,7 +68,7 @@ $mail = new Mail(new Config($mailSettings), $store);
 $failed = $mail->drain(20, static function () { throw new RuntimeException('Falha de entrega simulada'); }, 1000);
 check($failed['failed'] === 1 && $store->listing(1, 'all')['total'] === 1, 'Falha de e-mail não pode perder o contato.');
 check($mail->drain(20, static function () { throw new RuntimeException('Não deve tentar imediatamente'); }, 1001)['failed'] === 0, 'Fila deve respeitar intervalo.');
-$sent = $mail->drain(20, static function (array $item) { check(str_contains(Mail::body($item), 'CPF / CNPJ: 12345678909'), 'Cópia deve incluir os dados da solicitação.'); }, 1201);
+$sent = $mail->drain(20, static function (array $item) { check(str_contains(Mail::body($item), 'CPF / CNPJ: 123.456.789-09'), 'Cópia deve incluir os dados da solicitação.'); }, 1201);
 check($sent['sent'] === 1 && $store->listing(1, 'all')['items'][0]['mailStatus'] === 'sent', 'Fila deve recuperar entrega após configuração.');
 check($mail->drain(20, static function () { throw new RuntimeException('Não reenviar'); }, 1400)['sent'] === 0, 'Não reenviar e-mails confirmados.');
 $fixtures = json_decode(file_get_contents(__DIR__ . '/pricing-fixtures.json'), true, 64, JSON_THROW_ON_ERROR);
@@ -112,6 +132,32 @@ $expiredItem['request'] = $domain->normalize($input, $now->modify('+1 day'));
 check(str_contains(Mail::html($expiredItem), Mail::money($expiredItem['request']['estimate']['totalCents'])), 'Campanha encerrada deve apresentar o total do registro.');
 $invalidDateItem = $mailItem; $invalidDateItem['receivedAt'] = 'data-invalida';
 check(Mail::html($invalidDateItem) !== '' && Mail::body($invalidDateItem) !== '', 'Registro com data inesperada não pode interromper a entrega.');
+
+foreach ([
+    [null, 'Não informado'], ['', 'Não informado'], ['   ', 'Não informado'],
+    ['12345678909', '123.456.789-09'], ['123.456.789-09', '123.456.789-09'],
+    ['12345678000190', '12.345.678/0001-90'], ['12.345.678/0001-90', '12.345.678/0001-90'],
+    ['12abc34501de67', '12.ABC.345/01DE-67'], ['12.abc.345/01de-67', '12.ABC.345/01DE-67'],
+    ['123', '123'], ['12ABC34501DEAB', '12ABC34501DEAB'], ['123?ABC', '123?ABC'], ['...', '...'],
+    ['12<script>alert("x")</script>', '12<script>alert("x")</script>'],
+] as [$document, $displayDocument]) {
+    $documentItem = $mailItem; $documentItem['request']['contact']['taxId'] = $document;
+    $documentHtml = Mail::html($documentItem); $documentBody = Mail::body($documentItem);
+    check(str_contains($documentBody, 'CPF / CNPJ: ' . $displayDocument), 'E-mail em texto deve formatar apenas documento completo e preservar entrada malformada.');
+    check(str_contains($documentHtml, htmlspecialchars($displayDocument, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')), 'E-mail HTML deve exibir documento formatado ou entrada malformada com escape.');
+    if (str_contains($displayDocument, '<')) check(!str_contains($documentHtml, $displayDocument), 'Documento inválido não pode inserir HTML no e-mail.');
+}
+
+$malformedInput = $input; $malformedInput['contact']['taxId'] = '123?abc';
+$malformedRequest = $domain->normalize($malformedInput, $now);
+$malformedReceipt = $store->create($malformedRequest, str_repeat('b', 32));
+$storedDocument = $store->db->prepare('SELECT payload FROM requests WHERE id = ?');
+$storedDocument->execute([$malformedReceipt['id']]);
+$savedRequest = json_decode($store->decrypt($storedDocument->fetchColumn()), true, 64, JSON_THROW_ON_ERROR);
+check($savedRequest['contact']['taxId'] === '123?ABC', 'Persistência criptografada deve preservar documento malformado informado.');
+$malformedMail = ['id' => $malformedReceipt['id'], 'receivedAt' => $now->format(DATE_ATOM), 'request' => $savedRequest];
+check(str_contains(Mail::body($malformedMail), 'CPF / CNPJ: 123?ABC') && str_contains(Mail::html($malformedMail), '123?ABC'), 'Documento malformado deve acompanhar os dados no e-mail.');
+$storedDocument = null;
 
 echo "OK: {$checks} verificações; " . count($fixtures) . " cenários de preço; nenhum e-mail real enviado.\n";
 // Arquivos temporários exclusivos do teste, sem remoção recursiva de caminhos externos.
