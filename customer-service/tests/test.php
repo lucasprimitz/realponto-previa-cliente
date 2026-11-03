@@ -200,6 +200,68 @@ unset($reportInsert, $reportStore); gc_collect_cycles();
 foreach (['contacts.sqlite', 'contacts.sqlite-wal', 'contacts.sqlite-shm'] as $name) @unlink($reportSettings['dataDirectory'] . '/' . $name);
 @rmdir($reportSettings['dataDirectory']);
 
+
+// Inativação reversível: exclui listas e relatórios, preservando o registro e a entrega.
+$archiveSettings = $settings; $archiveSettings['dataDirectory'] = $testDirectory . '/archive';
+$archiveStore = new Store(new Config($archiveSettings));
+$archiveRows = [];
+for ($i = 0; $i < 29; $i++) {
+    $sample = $request; $sample['createdAt'] = '2031-06-10T12:00:00Z';
+    if ($i === 1) { $sample['estimate']['status'] = 'consultation'; $sample['estimate']['totalCents'] = null; $sample['estimate']['pixCents'] = null; }
+    $receipt = $archiveStore->create($sample, str_pad('archive-' . $i, 32, 'x'));
+    $archiveRows[] = $receipt['id'];
+}
+$firstArchive = $archiveStore->update(['id' => $archiveRows[0], 'handled' => true, 'note' => 'Encaminhado antes de inativar', 'version' => 1])['item'];
+$beforeRaw = $archiveStore->db->query("SELECT * FROM requests WHERE id='" . $archiveRows[0] . "'")->fetch();
+$beforeReport = $archiveStore->reports(2031);
+check($firstArchive['archived'] === false && $firstArchive['archivedAt'] === null, 'Novos registros começam ativos.');
+check($archiveStore->listing(1, 'all')['totalPages'] === 2, 'Registros ativos devem paginar.');
+foreach ([['archived' => 'true'], ['archived' => 1], ['version' => '2'], ['version' => 0], ['id' => 'invalid']] as $invalid) problem(fn() => $archiveStore->archive(array_replace(['id' => $archiveRows[0], 'version' => 2, 'archived' => true], $invalid)), 422);
+problem(fn() => $archiveStore->archive(['id' => $archiveRows[0], 'version' => 1, 'archived' => true]), 409);
+$archived = $archiveStore->archive(['id' => $archiveRows[0], 'version' => 2, 'archived' => true])['item'];
+check($archived['archived'] === true && $archived['version'] === 3 && preg_match('/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$/D', $archived['archivedAt']) === 1, 'Inativação deve registrar estado, data UTC e versão.');
+check($archived['request'] === $firstArchive['request'] && $archived['note'] === $firstArchive['note'] && $archived['handled'], 'Inativação preserva escopo, valores, contato e encaminhamento.');
+$afterRaw = $archiveStore->db->query("SELECT * FROM requests WHERE id='" . $archiveRows[0] . "'")->fetch();
+foreach (['payload', 'note', 'mail_status', 'mail_attempts', 'mailed_at', 'next_attempt', 'mail_error', 'received_at', 'input_hash', 'key_hash'] as $field) check($afterRaw[$field] === $beforeRaw[$field], 'Inativação não altera dados nem estado da fila de e-mail.');
+check($archiveStore->listing(1, 'handled')['total'] === 0 && $archiveStore->listing(1, 'pending')['total'] === 28, 'Filtros ativos não incluem solicitações inativas.');
+check($archiveStore->listing(1, 'archived')['total'] === 1 && $archiveStore->listing(1, 'archived')['items'][0]['id'] === $archiveRows[0], 'Inativos têm filtro próprio.');
+$afterReport = $archiveStore->reports(2031);
+check($afterReport['total']['count'] === $beforeReport['total']['count'] - 1 && $afterReport['total']['handledCount'] === 0 && $afterReport['total']['totalCents'] === $beforeReport['total']['totalCents'] - $firstArchive['request']['estimate']['pixCents'], 'Relatório deve retirar contagem e valor Pix histórico da solicitação inativa.');
+problem(fn() => $archiveStore->update(['id' => $archiveRows[0], 'handled' => false, 'note' => 'Não alterar', 'version' => 3]), 409);
+problem(fn() => $archiveStore->archive(['id' => $archiveRows[0], 'version' => 2, 'archived' => false]), 409);
+problem(fn() => $archiveStore->archive(['id' => $archiveRows[0], 'version' => 3, 'archived' => true]), 409);
+$restored = $archiveStore->archive(['id' => $archiveRows[0], 'version' => 3, 'archived' => false])['item'];
+check(!$restored['archived'] && $restored['archivedAt'] === null && $restored['version'] === 4, 'Restauração reativa e avança a versão.');
+check($archiveStore->reports(2031) === $beforeReport && $archiveStore->listing(1, 'handled')['total'] === 1, 'Restauração recupera exatamente relatório e encaminhamento anteriores.');
+for ($i = 0; $i < 26; $i++) $archiveStore->archive(['id' => $archiveRows[$i], 'version' => $i === 0 ? 4 : 1, 'archived' => true]);
+check($archiveStore->listing(1, 'all')['total'] === 3 && $archiveStore->listing(1, 'all')['totalPages'] === 1 && $archiveStore->listing(2, 'all')['items'] === [], 'Paginação ativa deve refletir inativações, inclusive remoção da última página.');
+check($archiveStore->listing(1, 'archived')['total'] === 26 && count($archiveStore->listing(1, 'archived')['items']) === 25 && count($archiveStore->listing(2, 'archived')['items']) === 1, 'Inativos devem paginar separadamente.');
+check($archiveStore->reports(2031)['total']['count'] === 3 && $archiveStore->reports(2031)['total']['consultationCount'] === 0, 'Inativação também retira solicitações sob consulta do relatório.');
+problem(fn() => $archiveStore->listing(1, 'deleted'), 422);
+problem(fn() => $archiveStore->archive(['id' => 'RP-' . str_repeat('0', 24), 'version' => 1, 'archived' => true]), 409);
+
+// Banco legado sem colunas novas: migração preserva dados criptografados e é repetível.
+$legacySettings = $settings; $legacySettings['dataDirectory'] = $testDirectory . '/legacy';
+$legacyConfig = new Config($legacySettings);
+$legacyDb = new PDO('sqlite:' . $legacySettings['dataDirectory'] . '/contacts.sqlite', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+$legacyDb->exec('CREATE TABLE requests (id TEXT PRIMARY KEY, key_hash TEXT NOT NULL UNIQUE, input_hash TEXT NOT NULL, payload TEXT NOT NULL, note TEXT NOT NULL, received_at TEXT NOT NULL, handled INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 1, mail_status TEXT NOT NULL, mail_attempts INTEGER NOT NULL DEFAULT 0, next_attempt INTEGER NOT NULL DEFAULT 0, mail_error TEXT, mailed_at TEXT)');
+$legacyRow = $beforeRaw; unset($legacyRow['archived'], $legacyRow['archived_at']);
+$legacyDb->prepare('INSERT INTO requests (' . implode(',', array_keys($legacyRow)) . ') VALUES (' . implode(',', array_fill(0, count($legacyRow), '?')) . ')')->execute(array_values($legacyRow));
+$legacyDb = null;
+$legacyStore = new Store($legacyConfig);
+$migrated = $legacyStore->listing(1, 'all');
+check($migrated['total'] === 1 && $migrated['items'][0]['archived'] === false && $migrated['items'][0]['archivedAt'] === null, 'Migração inicia registros legados como ativos.');
+check($migrated['items'][0]['request'] === $firstArchive['request'] && $migrated['items'][0]['note'] === $firstArchive['note'] && $migrated['items'][0]['version'] === 2, 'Migração preserva conteúdo e versão.');
+$legacyStore->archive(['id' => $legacyRow['id'], 'version' => 2, 'archived' => true]);
+$legacyStore = null;
+$legacyStore = new Store($legacyConfig);
+check($legacyStore->listing(1, 'all')['total'] === 0 && $legacyStore->listing(1, 'archived')['total'] === 1 && $legacyStore->reports(2031)['total']['count'] === 0, 'Reabertura não reativa registros nem repete colunas da migração.');
+$legacyStore = null; $archiveStore = null; gc_collect_cycles();
+foreach ([$archiveSettings['dataDirectory'], $legacySettings['dataDirectory']] as $directory) {
+    foreach (['contacts.sqlite', 'contacts.sqlite-wal', 'contacts.sqlite-shm'] as $name) @unlink($directory . '/' . $name);
+    @rmdir($directory);
+}
+
 echo "OK: {$checks} verificações; " . count($fixtures) . " cenários de preço; nenhum e-mail real enviado.\n";
 // Arquivos temporários exclusivos do teste, sem remoção recursiva de caminhos externos.
 $store = null; unset($mail); gc_collect_cycles();
