@@ -10,8 +10,9 @@ $routes = [
     '/quote.mjs' => 'quote.mjs', '/assets/realponto-30-anos.png' => 'assets/realponto-30-anos.png',
     '/contatos/' => 'contatos/index.html', '/contatos/index.html' => 'contatos/index.html',
     '/contatos/panel.css' => 'contatos/panel.css', '/contatos/panel.mjs' => 'contatos/panel.mjs',
+    '/contatos/panel-model.mjs' => 'contatos/panel-model.mjs',
 ];
-foreach (['session', 'requests', 'login', 'logout', 'request-update'] as $endpoint) {
+foreach (['session', 'requests', 'reports', 'login', 'logout', 'request-update'] as $endpoint) {
     if ($path === '/api/' . $endpoint . '.php') return false;
 }
 header('Cache-Control: no-store'); header('X-Content-Type-Options: nosniff');

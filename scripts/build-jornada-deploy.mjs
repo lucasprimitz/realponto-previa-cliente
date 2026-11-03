@@ -14,7 +14,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
-const BASE_STORE_BLOB = 'e170d6931028a6ac857c87875500a229d0044127';
+const BASE_STORE_BLOB = '8e6c0ff7cb62990ca8763602f5d707a6c163dbec';
 const API_REQUIRE = "require dirname(__DIR__, 2) . '/src/bootstrap.php';";
 const API_REPLACE = "require __DIR__ . '/_bootstrap.php';";
 const DIGEST = bytes => createHash('sha256').update(bytes).digest('hex');
