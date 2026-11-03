@@ -9,6 +9,7 @@ export const BRANCH = 'main';
 export const PUBLIC_FILES = Object.freeze([
   'index.html', 'preview.css', 'app.mjs', 'customer-model.mjs',
   'customer-request.mjs', 'request-transport.mjs', 'quote.mjs', 'assets/realponto-30-anos.png',
+  'assets/lgRP.png',
 ]);
 const METADATA = 'preview-deployment.json';
 const MAX_BYTES = 32 * 1024 * 1024;

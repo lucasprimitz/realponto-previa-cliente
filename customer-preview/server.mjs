@@ -18,6 +18,7 @@ const routes = new Map([
   ['/request-transport.mjs', ['request-transport.mjs', 'text/javascript; charset=utf-8']],
   ['/dist/quote.mjs', ['../dist/quote.mjs', 'text/javascript; charset=utf-8']],
   ['/assets/realponto-30-anos.png', ['../dist/assets/realponto-30-anos.png', 'image/png']],
+  ['/assets/lgRP.png', ['assets/lgRP.png', 'image/png']],
 ]);
 
 const securityHeaders = {
