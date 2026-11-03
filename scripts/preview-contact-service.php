@@ -12,7 +12,7 @@ $routes = [
     '/contatos/panel.css' => 'contatos/panel.css', '/contatos/panel.mjs' => 'contatos/panel.mjs',
     '/contatos/panel-model.mjs' => 'contatos/panel-model.mjs',
 ];
-foreach (['session', 'requests', 'reports', 'login', 'logout', 'request-update'] as $endpoint) {
+foreach (['session', 'requests', 'reports', 'login', 'logout', 'request-update', 'request-archive'] as $endpoint) {
     if ($path === '/api/' . $endpoint . '.php') return false;
 }
 header('Cache-Control: no-store'); header('X-Content-Type-Options: nosniff');
