@@ -36,14 +36,28 @@
       </form>
     </section>
     <section id="workspace" aria-labelledby="page-title" hidden>
-      <div class="page-heading"><div><span class="eyebrow">ATENDIMENTO REALPONTO</span><h1 id="page-title" tabindex="-1">Solicitações recebidas</h1><p>Confira os dados e registre para quem cada atendimento foi encaminhado.</p></div><div class="count-badge"><strong id="request-count">0</strong><span>solicitações nesta lista</span></div></div>
+      <div class="page-heading"><div><span class="eyebrow">ATENDIMENTO REALPONTO</span><h1 id="page-title" tabindex="-1">Solicitações recebidas</h1><p>Organize os contatos, confira o investimento e encaminhe cada solicitação.</p></div><div class="count-badge"><strong id="request-count">0</strong><span>solicitações nesta lista</span></div></div>
+      <nav class="workspace-tabs" aria-label="Áreas do atendimento" role="tablist">
+        <button id="requests-tab" class="workspace-tab" type="button" role="tab" aria-selected="true" aria-controls="requests-view">Solicitações</button>
+        <button id="reports-tab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="reports-view" tabindex="-1">Relatórios mensais</button>
+      </nav>
       <div id="delivery-notice" class="notice" hidden></div>
+      <div id="requests-view" role="tabpanel" aria-labelledby="requests-tab">
       <div class="toolbar"><div class="filter-field"><label for="status-filter">Mostrar</label><select id="status-filter"><option value="pending">Pendentes</option><option value="all">Todas as solicitações</option><option value="handled">Encaminhadas</option></select></div><button id="refresh" class="button secondary" type="button">Atualizar lista</button></div>
       <p id="list-status" class="hint" role="status" aria-live="polite"></p>
       <div id="requests-list" class="requests-list"></div>
       <div id="empty-list" class="empty-card" hidden><div class="lock-icon" aria-hidden="true">✓</div><h2>Nenhuma solicitação por aqui.</h2><p>Os novos contatos aparecerão nesta área após o envio pelo formulário.</p></div>
       <nav id="pagination" class="pagination" aria-label="Páginas de solicitações" hidden><button id="previous-page" class="button secondary" type="button">← Anterior</button><span id="page-indicator"></span><button id="next-page" class="button secondary" type="button">Próxima →</button></nav>
+      </div>
+      <section id="reports-view" role="tabpanel" aria-labelledby="reports-tab" hidden>
+        <div class="toolbar report-toolbar"><div><h2>Movimento das solicitações</h2><p class="hint">Acompanhe os contatos recebidos e o investimento estimado em cada mês.</p></div><div class="report-filters"><div class="filter-field"><label for="report-year">Ano</label><input id="report-year" type="number" inputmode="numeric" min="2000" max="2100" step="1"></div><button id="refresh-reports" class="button secondary" type="button">Atualizar relatório</button></div></div>
+        <p id="report-status" class="hint" role="status" aria-live="polite"></p>
+        <div id="report-metrics" class="report-metrics"></div>
+        <div id="report-table-wrap" class="report-table-wrap" hidden><table class="report-table"><caption id="report-caption">Solicitações por mês</caption><thead><tr><th scope="col">Mês</th><th scope="col">Solicitações</th><th scope="col">Encaminhadas</th><th scope="col">Sob consulta</th><th scope="col">Valor estimado</th></tr></thead><tbody id="report-rows"></tbody><tfoot id="report-total"></tfoot></table></div>
+        <p class="report-explanation">Os valores consideram a estimativa registrada no envio e a forma de pagamento escolhida, incluindo o desconto do Pix quando aplicável. Solicitações sob consulta entram na contagem, mas não na soma. Estes valores não representam vendas aprovadas; “encaminhada” indica apenas o andamento do atendimento.</p>
+      </section>
     </section>
+    <dialog id="copy-dialog" aria-labelledby="copy-title"><div class="copy-dialog-heading"><h2 id="copy-title">Copiar solicitação</h2><button id="close-copy" class="button secondary" type="button">Fechar</button></div><p id="copy-help">Selecione o texto abaixo e copie para encaminhar.</p><label class="sr-only" for="copy-text">Resumo completo da solicitação</label><textarea id="copy-text" readonly rows="16" aria-describedby="copy-help"></textarea></dialog>
   </main>
   <footer class="container footer">Realponto · Redução de Jornada</footer>
   <noscript><p class="container notice">Ative o JavaScript para acessar as solicitações.</p></noscript>
