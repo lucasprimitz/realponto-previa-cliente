@@ -33,7 +33,7 @@ test('received dates use São Paulo even across a UTC month boundary', () => {
   const date = receivedDate('2026-11-01T01:30:00Z');
   assert.match(date, /31\/10\/2026/);
   assert.match(date, /22:30/);
-  for (const value of [null, undefined, '', 'invalid']) assert.equal(receivedDate(value), 'Data não disponível');
+  for (const value of [null, undefined, '', 'invalid']) assert.equal(receivedDate(value), 'Não informado');
 });
 
 test('formats complete phone, CPF and numeric or alphanumeric CNPJ and retains malformed documents', () => {
@@ -96,7 +96,7 @@ test('consultation suppresses residual prices throughout display and copied text
   assert.doesNotMatch(copy, /R\$|842,38|140,40|361,02/);
 });
 
-test('copied request contains contact, scope, selected and alternative payments, and internal handoff', () => {
+test('copied request contains contact, scope, selected and alternative payments, and proposal guidance', () => {
   const data = item('boleto');
   const copy = buildRequestText(data);
   for (const text of [
@@ -109,7 +109,7 @@ test('copied request contains contact, scope, selected and alternative payments,
     'Estimativa com a campanha: ' + amount(84238),
     'OPÇÃO ESCOLHIDA: Boleto em 6 parcelas — 6x de ' + amount(14040),
     'Pix: ' + amount(80026), 'Cartão de crédito: 10x de ' + amount(8424),
-    '15/12/2026', 'Encaminhada: Não', 'Direcionar para Ana',
+    '15/12/2026',
     'Contato autorizado', 'O preenchimento não equivale à proposta nem à sua aprovação',
   ]) assert.ok(copy.includes(text), text);
 });
@@ -119,7 +119,6 @@ test('copy explicitly excludes retiring old schedules on Secullum Offline', () =
   data.request.configuration.system = 'secullum-offline';
   data.handled = true;
   assert.match(buildRequestText(data), /Inativação dos horários antigos: Não contemplada no Secullum Offline/);
-  assert.match(buildRequestText(data), /Encaminhada: Sim/);
   for (const system of ['secullum-rh', 'rhid', 'iponto']) {
     data.request.configuration.system = system;
     assert.match(buildRequestText(data), /Inativação dos horários antigos: Contemplada pela Realponto/);
@@ -134,7 +133,7 @@ test('plain copied text preserves names and document references without HTML int
   const copy = buildRequestText(data);
   assert.ok(copy.includes('Empresa: Oficina <Norte> & Sul'));
   assert.ok(copy.includes('CPF / CNPJ: 123?'));
-  assert.ok(copy.includes('Responsável / observação: <Ana> & Bruno'));
+  assert.ok(!copy.includes('<Ana> & Bruno')); 
   assert.ok(!copy.includes('&lt;'));
 });
 
@@ -155,4 +154,20 @@ test('missing installment snapshots never fabricate an installment and invalid d
   data.request.estimate.campaignDeadline = '2026-02-30';
   assert.equal(selectedPayment(data).value, amount(84238));
   assert.doesNotMatch(buildRequestText(data), /30\/02\/2026|6x de/);
+});
+
+
+test('copied summary omits internal tracking while preserving proposal and contact details', () => {
+  const data = item();
+  for (const archived of [false, true]) {
+    data.archived = archived;
+    data.handled = true;
+    const copied = buildRequestText(data);
+    assert.doesNotMatch(copied, /ACOMPANHAMENTO|Situação:|Encaminhada:|Responsável \/ observação:|Direcionar para Ana/);
+    assert.match(copied, /contato@example.invalid/);
+    assert.match(copied, /Contato autorizado pelo cliente/);
+    assert.match(copied, /6x de/);
+    assert.equal(data.note, 'Direcionar para Ana');
+    assert.equal(data.handled, true);
+  }
 });
