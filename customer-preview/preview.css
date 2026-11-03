@@ -170,6 +170,11 @@ select{cursor:pointer}
 .contact-fields input::placeholder{color:#74798e;font-size:14px}
 .contact-permission{display:flex;gap:12px;align-items:start;font-size:14px;line-height:1.6;color:#5f6379;margin-top:23px;cursor:pointer}
 .contact-permission input{accent-color:var(--blue);width:18px;height:18px;margin:2px 0 0;flex-shrink:0}
+.contact-permission-field{align-self:center}
+.contact-fields .contact-permission{display:flex;align-items:flex-start;margin:0;padding:16px;border:1px solid #d9d4ee;border-radius:12px;background:var(--lavender);color:var(--blue-deep);font-size:14px;font-weight:400;box-shadow:0 3px 10px #29257808;transition:border-color .15s,box-shadow .15s}
+.contact-fields .contact-permission:hover{border-color:#b0a5d1}
+.contact-fields .contact-permission:focus-within{border-color:var(--blue);box-shadow:0 0 0 3px #29257815}
+.contact-fields .contact-permission input{width:18px;min-height:18px;height:18px;padding:0;margin:2px 0 0;flex:0 0 18px}
 .preview-note{display:flex;align-items:start;gap:11px;background:#f2f0f9;border:1px solid #e0dbee;border-radius:11px;padding:16px;margin-top:21px;color:#69617c}
 .preview-note .icon{width:19px;height:19px;margin-top:2px}
 .preview-note p{margin:0;font-size:13px;line-height:1.65}
@@ -454,6 +459,9 @@ select{cursor:pointer}
 .payment-option input:focus-visible+.payment-card{outline:3px solid #7f72cd;outline-offset:3px}
 .payment-option input[aria-invalid=true]+.payment-card{border-color:var(--red)}
 .payment-help{color:#6a6d81;font-size:13px;line-height:1.6;margin:15px 0 0}
+.payment-reassurance{display:flex;align-items:flex-start;gap:9px;margin:12px 0 0;padding:12px 14px;border:1px solid #f1d5de;border-radius:10px;background:#fff7f9;color:var(--muted);font-size:13px;line-height:1.65}
+.payment-reassurance strong{color:var(--red);font-weight:700}
+.payment-asterisk{flex:0 0 auto;color:var(--red);font-size:22px;font-weight:700;line-height:1.1;margin-top:2px}
 .contact-heading{border-top:1px solid #e4e7f0;padding-top:28px}
 .contact-heading h2{font-size:25px}
 @media(max-width:1100px){
