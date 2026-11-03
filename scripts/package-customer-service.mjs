@@ -30,7 +30,7 @@ export async function packageCustomerService(destination, releaseId) {
     }
     files.set('public/' + file, bytes);
   }
-  for (const file of ['index.html', 'panel.css', 'panel.mjs']) {
+  for (const file of ['index.html', 'panel.css', 'panel.mjs', 'panel-model.mjs']) {
     files.set('public/contatos/' + file, await fs.readFile(path.join(root, 'contacts-panel', file)));
   }
   // Apenas fontes explicitamente permitidas. Banco, sessões, chaves, configurações

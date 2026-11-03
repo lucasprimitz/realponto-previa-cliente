@@ -59,6 +59,41 @@ final class Store {
         $statement->bindValue(1, ($page - 1) * 25, \PDO::PARAM_INT); $statement->execute();
         return ['ok' => true, 'items' => array_map(fn(array $row) => $this->item($row), $statement->fetchAll()), 'page' => $page, 'total' => $total, 'totalPages' => max(1, (int)ceil($total / 25))];
     }
+    /** Aggregate the stored estimates, without exposing contacts or recalculating prices. */
+    public function reports(int $year): array {
+        if ($year < 2000 || $year > 2100) throw new Problem(422, 'Selecione um ano entre 2000 e 2100.');
+        $zone = new \DateTimeZone('America/Sao_Paulo');
+        $utc = new \DateTimeZone('UTC');
+        $start = new \DateTimeImmutable(sprintf('%04d-01-01 00:00:00', $year), $zone);
+        $end = $start->modify('+1 year');
+        $empty = ['count' => 0, 'pricedCount' => 0, 'consultationCount' => 0, 'totalCents' => 0, 'handledCount' => 0];
+        $months = [];
+        for ($month = 1; $month <= 12; $month++) $months[] = ['month' => sprintf('%04d-%02d', $year, $month)] + $empty;
+        $total = $empty;
+        $statement = $this->db->prepare('SELECT received_at,handled,payload FROM requests WHERE received_at >= ? AND received_at < ? ORDER BY received_at,id');
+        $statement->execute([$start->setTimezone($utc)->format('Y-m-d\TH:i:s\Z'), $end->setTimezone($utc)->format('Y-m-d\TH:i:s\Z')]);
+        while ($row = $statement->fetch()) {
+            $monthIndex = (int)(new \DateTimeImmutable($row['received_at']))->setTimezone($zone)->format('n') - 1;
+            $request = json_decode($this->decrypt($row['payload']), true, 32, JSON_THROW_ON_ERROR);
+            $estimate = $request['estimate'] ?? [];
+            $method = $request['payment']['method'] ?? null;
+            $cents = $method === 'pix' ? ($estimate['pixCents'] ?? null) : ($estimate['totalCents'] ?? null);
+            $priced = ($estimate['status'] ?? '') === 'priced' && in_array($method, ['pix', 'boleto', 'credit-card'], true) && is_int($cents) && $cents >= 0;
+            foreach ([&$months[$monthIndex], &$total] as &$bucket) {
+                $bucket['count']++;
+                if ((bool)$row['handled']) $bucket['handledCount']++;
+                if ($priced) {
+                    // The browser must receive exact integer cents, including for large historical totals.
+                    if ($cents > 9007199254740991 - $bucket['totalCents']) throw new Problem(500, 'Não foi possível calcular o relatório com segurança.');
+                    $bucket['pricedCount']++;
+                    $bucket['totalCents'] += $cents;
+                } else $bucket['consultationCount']++;
+            }
+            unset($bucket);
+        }
+        $statement->closeCursor();
+        return ['ok' => true, 'year' => $year, 'timeZone' => 'America/Sao_Paulo', 'months' => $months, 'total' => $total];
+    }
     public function update(array $input): array {
         if (!is_string($input['id'] ?? null) || !preg_match('/^RP-[A-F0-9]{24}$/D', $input['id']) || !is_bool($input['handled'] ?? null) || !is_int($input['version'] ?? null) || $input['version'] < 1) throw new Problem(422, 'Atualização inválida.');
         $note = Domain::note($input['note'] ?? null);

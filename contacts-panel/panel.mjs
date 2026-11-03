@@ -1,3 +1,4 @@
+import {safeText, amount, receivedDate, quantity, formatPhone, formatTaxId, systemLabel, selectedPayment, buildRequestText} from './panel-model.mjs';
 const $ = selector => document.querySelector(selector);
 const list = $('#requests-list');
 const loginPanel = $('#login-panel');
@@ -11,10 +12,11 @@ const filter = $('#status-filter');
 const refreshButton = $('#refresh');
 const previousButton = $('#previous-page');
 const nextButton = $('#next-page');
-const state = {authenticated: false, csrfToken: '', page: 1, totalPages: 1, busy: false, generation: 0, lastActivity: 0};
+const state = {authenticated: false, csrfToken: '', page: 1, totalPages: 1, busy: false, generation: 0, lastActivity: 0, view: 'requests'};
 const idleMilliseconds = 15 * 60 * 1000;
 let idleTimer;
 let apiBase;
+let requestCardSequence = 0;
 
 function notice(text = '', kind = '') {
   message.textContent = text;
@@ -32,6 +34,9 @@ function controlsBusy(busy) {
   loginButton.disabled = busy;
   refreshButton.disabled = busy;
   filter.disabled = busy;
+  $('#refresh-reports').disabled = busy;
+  $('#report-year').disabled = busy;
+  for (const tab of document.querySelectorAll('.workspace-tab')) tab.disabled = busy;
   previousButton.disabled = busy || state.page <= 1;
   nextButton.disabled = busy || state.page >= state.totalPages;
   workspace.setAttribute('aria-busy', String(busy));
@@ -43,6 +48,13 @@ function clearPrivateView() {
   state.lastActivity = 0;
   clearTimeout(idleTimer);
   list.replaceChildren();
+  $('#report-metrics').replaceChildren();
+  $('#report-rows').replaceChildren();
+  $('#report-total').replaceChildren();
+  $('#report-status').textContent = '';
+  $('#report-table-wrap').hidden = true;
+  $('#copy-text').value = '';
+  if ($('#copy-dialog').open) $('#copy-dialog').close();
   password.value = '';
   $('#request-count').textContent = '0';
   $('#list-status').textContent = '';
@@ -54,22 +66,6 @@ function clearPrivateView() {
   loginPanel.hidden = false;
   logoutButton.hidden = true;
   controlsBusy(false);
-}
-function safeText(value, fallback = 'Não informado') {
-  return typeof value === 'string' && value.trim() ? value : fallback;
-}
-function amount(cents) {
-  return Number.isSafeInteger(cents) && cents >= 0
-    ? new Intl.NumberFormat('pt-BR', {style: 'currency', currency: 'BRL'}).format(cents / 100)
-    : 'Valor sob consulta';
-}
-function receivedDate(value) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Data não disponível' : new Intl.DateTimeFormat('pt-BR', {dateStyle: 'short', timeStyle: 'short'}).format(date);
-}
-function quantity(value, upper) {
-  if (value === 'consultar') return 'Mais de ' + new Intl.NumberFormat('pt-BR').format(upper);
-  return Number.isSafeInteger(value) && value > 0 ? 'Até ' + new Intl.NumberFormat('pt-BR').format(value) : 'Não informado';
 }
 function addDetail(dl, title, value, className = '') {
   const row = document.createElement('div');
@@ -132,37 +128,123 @@ function renderItem(item) {
   const contact = request.contact ?? {};
   const configuration = request.configuration ?? {};
   const estimate = request.estimate ?? {};
+  const payment = selectedPayment(item);
   const card = textElement('article', 'request-card', '');
+  const front = textElement('div', 'request-face request-front', '');
+  const back = textElement('div', 'request-face request-back', '');
+  back.id = 'request-details-' + (++requestCardSequence);
+  back.inert = true;
+  back.setAttribute('aria-hidden', 'true');
   const top = textElement('div', 'request-top', '');
   const heading = textElement('div', 'request-heading', '');
   const headingTitle = textElement('h2', '', safeText(contact.company, 'Solicitação de proposta'));
-  const meta = textElement('p', 'request-meta', '');
-  meta.append(textElement('span', '', receivedDate(item.receivedAt)), textElement('span', 'request-id', 'Protocolo: ' + safeText(item.id, '—')));
+  const meta = textElement('p', 'request-meta', receivedDate(item.receivedAt));
   heading.append(headingTitle, meta);
+  const actions = textElement('div', 'request-actions', '');
   const badge = textElement('span', 'pill' + (item.handled ? ' handled' : ''), item.handled ? 'Encaminhada' : 'Pendente');
-  top.append(heading, badge);
+  const copy = textElement('button', 'button copy-button', 'Copiar solicitação');
+  copy.type = 'button';
+  copy.setAttribute('aria-label', 'Copiar todas as informações de ' + safeText(contact.company, 'esta solicitação'));
+  const copyStatus = textElement('p', 'copy-status', '');
+  copyStatus.setAttribute('role', 'status');
+  copyStatus.setAttribute('aria-live', 'polite');
+  copyStatus.hidden = true;
+  copy.addEventListener('click', async () => {
+    if (!state.authenticated) return;
+    const text = buildRequestText(item);
+    const generation = state.generation;
+    copy.disabled = true;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(text);
+      if (generation !== state.generation || !state.authenticated) return;
+      copyStatus.textContent = 'Resumo completo copiado. Pronto para colar.';
+      copyStatus.className = 'copy-status';
+      copyStatus.hidden = false;
+      recordActivity();
+    } catch {
+      if (generation !== state.generation || !state.authenticated) return;
+      $('#copy-text').value = text;
+      $('#copy-dialog').showModal();
+      $('#copy-text').focus();
+      $('#copy-text').select();
+      copyStatus.textContent = 'Use o texto aberto para copiar a solicitação.';
+      copyStatus.hidden = false;
+    } finally { copy.disabled = false; }
+  });
+  actions.append(badge, copy);
+  top.append(heading, actions);
   const body = textElement('div', 'request-body', '');
+  const investment = textElement('section', 'investment-card', '');
+  investment.append(textElement('span', 'investment-label', 'FORMA DE PAGAMENTO ESCOLHIDA'));
+  investment.append(textElement('h3', '', payment.label));
+  investment.append(textElement('p', 'investment-value', payment.value));
+  investment.append(textElement('p', 'investment-caption', payment.caption));
+  if (Number.isSafeInteger(payment.totalCents) && request.payment?.method !== 'pix') {
+    const total = textElement('p', 'investment-total', '');
+    total.append(textElement('span', '', 'Total estimado'), textElement('strong', '', amount(payment.totalCents)));
+    investment.append(total);
+  }
   const person = section('Contato');
   addDetail(person.dl, 'Nome', safeText(contact.name));
-  addDetail(person.dl, 'E-mail', safeText(contact.email), 'wide');
-  addDetail(person.dl, 'Telefone / WhatsApp', safeText(contact.phone));
-  if (contact.taxId) addDetail(person.dl, 'CPF / CNPJ', safeText(contact.taxId));
+  addDetail(person.dl, 'Telefone / WhatsApp', formatPhone(contact.phone) || 'Não informado');
+  addDetail(person.dl, 'E-mail', safeText(contact.email), contact.taxId ? '' : 'wide');
+  if (contact.taxId) addDetail(person.dl, 'CPF / CNPJ', formatTaxId(contact.taxId));
+  const showDetails = textElement('button', 'request-details-button', 'Ver configuração e valores');
+  showDetails.type = 'button';
+  showDetails.setAttribute('aria-controls', back.id);
+  showDetails.setAttribute('aria-expanded', 'false');
+  const backTop = textElement('div', 'request-back-top', '');
+  const returnButton = textElement('button', 'button secondary return-button', 'Voltar à solicitação');
+  returnButton.type = 'button';
+  backTop.append(returnButton, textElement('h3', '', 'Configuração e valores'), textElement('p', '', safeText(contact.company, 'Solicitação de proposta')));
+  const details = textElement('div', 'request-back-content', '');
+  details.tabIndex = 0;
+  details.setAttribute('role', 'region');
+  details.setAttribute('aria-label', 'Detalhes da configuração e valores');
   const scope = section('Configuração solicitada');
-  const systems = {'secullum-offline': 'Secullum Offline', 'secullum-rh': 'Secullum RH', rhid: 'RHID', iponto: 'iPonto'};
-  addDetail(scope.dl, 'Sistema', systems[configuration.system] ?? 'Não informado');
+  addDetail(scope.dl, 'Sistema', systemLabel(configuration.system));
   addDetail(scope.dl, 'Horários a cadastrar', quantity(configuration.schedules, 100));
   addDetail(scope.dl, 'Funcionários a reagendar', quantity(configuration.employees, 1000));
   addDetail(scope.dl, 'Banco de horas', configuration.bankHours === true ? 'Sim' : 'Não');
   addDetail(scope.dl, 'Escalas', configuration.workScale === true ? 'Sim' : 'Não');
-  const investment = section('Proposta e pagamento');
-  addDetail(investment.dl, 'Pagamento desejado', safeText(request.payment?.label));
-  addDetail(investment.dl, estimate.campaignDiscountApplied ? 'Estimativa com a campanha' : 'Estimativa da parametrização', amount(estimate.totalCents), 'estimate-value');
-  if (request.payment?.method === 'pix' && Number.isSafeInteger(estimate.pixCents)) addDetail(investment.dl, 'Estimativa no Pix', amount(estimate.pixCents));
-  if (request.payment?.method === 'boleto' && Number.isSafeInteger(estimate.boletoInstallmentCents)) addDetail(investment.dl, 'Parcelamento sob consulta', '6x de ' + amount(estimate.boletoInstallmentCents));
-  if (request.payment?.method === 'credit-card' && Number.isSafeInteger(estimate.cardInstallmentCents)) addDetail(investment.dl, 'Parcelamento sem juros', '10x de ' + amount(estimate.cardInstallmentCents));
-  investment.container.append(textElement('p', 'estimate-note', 'Valores sujeitos à confirmação da proposta. O envio não equivale à aprovação.'));
-  investment.container.append(textElement('p', 'delivery-state' + (item.mailStatus === 'failed' ? ' failed' : ''), displayDelivery(item.mailStatus)));
-  body.append(person.container, scope.container, investment.container);
+  addDetail(scope.dl, 'Inativação dos horários antigos', configuration.system === 'secullum-offline' ? 'Não contemplada no Secullum Offline' : 'Incluída', 'wide');
+  const values = section('Estimativa e opções de pagamento');
+  addDetail(values.dl, estimate.campaignDiscountApplied ? 'Total com a campanha' : 'Total da parametrização', amount(estimate.totalCents));
+  if (estimate.campaignDiscountApplied) {
+    addDetail(values.dl, 'Total sem a campanha', amount(estimate.totalBeforeDiscountCents));
+    addDetail(values.dl, 'Economia da campanha', amount(estimate.discountCents));
+  }
+  addDetail(values.dl, 'Pix', amount(estimate.pixCents));
+  addDetail(values.dl, 'Boleto · sob consulta', Number.isSafeInteger(estimate.boletoInstallmentCents) ? '6x de ' + amount(estimate.boletoInstallmentCents) : 'Valor sob consulta');
+  addDetail(values.dl, 'Cartão · sem juros', Number.isSafeInteger(estimate.cardInstallmentCents) ? '10x de ' + amount(estimate.cardInstallmentCents) : 'Valor sob consulta');
+  details.append(scope.container, values.container, textElement('p', 'request-id', 'Protocolo: ' + safeText(item.id, '—')));
+  back.append(backTop, details);
+  function flipCard(flipped) {
+    card.classList.toggle('is-flipped', flipped);
+    showDetails.setAttribute('aria-expanded', String(flipped));
+    const activeFace = flipped ? back : front;
+    const inactiveFace = flipped ? front : back;
+    activeFace.inert = false;
+    activeFace.removeAttribute('aria-hidden');
+    (flipped ? returnButton : showDetails).focus({preventScroll: true});
+    inactiveFace.inert = true;
+    inactiveFace.setAttribute('aria-hidden', 'true');
+    recordActivity();
+  }
+  showDetails.addEventListener('click', () => flipCard(true));
+  returnButton.addEventListener('click', () => flipCard(false));
+  back.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); flipCard(false); }
+  });
+  body.append(investment, person.container, showDetails, copyStatus);
+  const delivery = textElement('p', '', '');
+  function updateDelivery() {
+    delivery.className = 'delivery-state ' + (item.mailStatus === 'sent' ? 'sent' : 'not-sent');
+    delivery.textContent = displayDelivery(item.mailStatus);
+  }
+  updateDelivery();
+  body.append(delivery);
   const edit = textElement('form', 'request-edit', '');
   const handledLabel = textElement('label', 'handled-label', '');
   const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = item.handled === true;
@@ -186,6 +268,7 @@ function renderItem(item) {
       if (!item || !Number.isSafeInteger(item.version)) throw new Error('Não foi possível confirmar a atualização. Atualize a lista.');
       badge.className = 'pill' + (item.handled ? ' handled' : ''); badge.textContent = item.handled ? 'Encaminhada' : 'Pendente';
       checkbox.checked = item.handled === true; note.value = item.note ?? '';
+      updateDelivery();
       saveMessage.textContent = 'Encaminhamento salvo.'; saveMessage.className = 'save-message'; saveMessage.hidden = false;
       recordActivity();
     } catch (error) {
@@ -196,7 +279,8 @@ function renderItem(item) {
       save.disabled = false; checkbox.disabled = false; note.disabled = false; save.textContent = 'Salvar';
     }
   });
-  card.append(top, body, edit);
+  front.append(top, body, edit);
+  card.append(front, back);
   return card;
 }
 async function loadRequests(page = state.page) {
@@ -224,6 +308,83 @@ async function loadRequests(page = state.page) {
     notice(error.message, 'error');
   } finally { controlsBusy(false); }
 }
+function setView(view) {
+  state.view = view;
+  const reports = view === 'reports';
+  $('#requests-view').hidden = reports;
+  $('#reports-view').hidden = !reports;
+  for (const name of ['requests', 'reports']) {
+    const tab = $('#' + name + '-tab');
+    tab.setAttribute('aria-selected', String(name === view));
+    tab.tabIndex = name === view ? 0 : -1;
+  }
+  $('#page-title').textContent = reports ? 'Relatórios mensais' : 'Solicitações recebidas';
+  document.querySelector('.page-heading > div > p').textContent = reports ? 'Veja o movimento dos contatos e os valores estimados ao longo do ano.' : 'Organize os contatos, confira o investimento e encaminhe cada solicitação.';
+  document.querySelector('.count-badge').hidden = reports;
+}
+async function loadActiveView(reset = false) {
+  if (state.view === 'reports') return loadReports();
+  return loadRequests(reset ? 1 : state.page);
+}
+function validMetrics(row) {
+  return row && ['count', 'pricedCount', 'consultationCount', 'totalCents', 'handledCount'].every(key => Number.isSafeInteger(row[key]) && row[key] >= 0);
+}
+function reportMetric(label, value, description, accent = false) {
+  const box = textElement('article', 'report-metric' + (accent ? ' accent' : ''), '');
+  box.append(textElement('h3', '', label), textElement('strong', '', value), textElement('p', '', description));
+  return box;
+}
+function renderReport(result) {
+  if (!Number.isInteger(result.year) || !Array.isArray(result.months) || result.months.length !== 12 || !validMetrics(result.total) || result.months.some((row, index) => !validMetrics(row) || row.month !== result.year + '-' + String(index + 1).padStart(2, '0'))) throw new Error('Não foi possível conferir o relatório. Atualize e tente novamente.');
+  const total = result.total;
+  const number = value => new Intl.NumberFormat('pt-BR').format(value);
+  const average = total.pricedCount ? amount(Math.round(total.totalCents / total.pricedCount)) : '—';
+  $('#report-metrics').replaceChildren(
+    reportMetric('Solicitações em ' + result.year, number(total.count), 'Todos os contatos recebidos no ano.'),
+    reportMetric('Valor estimado no ano', amount(total.totalCents), number(total.pricedCount) + ' solicitações com valor definido.', true),
+    reportMetric('Ticket médio estimado', average, 'Média das solicitações com valor definido.'),
+    reportMetric('Sob consulta', number(total.consultationCount), 'Aguardam definição do valor da proposta.')
+  );
+  const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const current = new Intl.DateTimeFormat('en-CA', {year: 'numeric', month: '2-digit', timeZone: 'America/Sao_Paulo'}).formatToParts(new Date());
+  const currentMonth = current.find(part => part.type === 'year').value + '-' + current.find(part => part.type === 'month').value;
+  const rows = result.months.map((month, index) => {
+    const row = textElement('tr', month.month === currentMonth ? 'current-month' : '', '');
+    const label = textElement('th', '', monthNames[index]); label.scope = 'row';
+    if (month.month === currentMonth) label.append(textElement('span', 'current-label', 'Mês atual'));
+    row.append(label, ...[number(month.count), number(month.handledCount), number(month.consultationCount), amount(month.totalCents)].map((value, column) => textElement('td', column === 3 ? 'report-amount' : '', value)));
+    return row;
+  });
+  $('#report-rows').replaceChildren(...rows);
+  const totalRow = textElement('tr', '', '');
+  const totalLabel = textElement('th', '', 'Total do ano'); totalLabel.scope = 'row';
+  totalRow.append(totalLabel, ...[number(total.count), number(total.handledCount), number(total.consultationCount), amount(total.totalCents)].map(value => textElement('td', '', value)));
+  $('#report-total').replaceChildren(totalRow);
+  $('#report-caption').textContent = 'Solicitações recebidas por mês · ' + result.year;
+  $('#report-table-wrap').hidden = false;
+  $('#report-status').textContent = total.count ? 'Relatório atualizado. Todas as solicitações do ano estão incluídas, independentemente do filtro da lista.' : 'Nenhuma solicitação recebida neste ano.';
+}
+async function loadReports() {
+  if (!state.authenticated || state.busy) return;
+  const year = Number($('#report-year').value);
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) { notice('Informe um ano entre 2000 e 2100.', 'error'); $('#report-year').focus(); return; }
+  controlsBusy(true);
+  $('#report-metrics').replaceChildren();
+  $('#report-table-wrap').hidden = true;
+  $('#report-status').textContent = 'Carregando relatório de ' + year + '…';
+  const generation = ++state.generation;
+  try {
+    const result = await api('reports.php?year=' + year);
+    if (generation !== state.generation || !state.authenticated) return;
+    if (result.year !== year) throw new Error('O ano retornado não corresponde ao selecionado. Atualize o relatório.');
+    renderReport(result);
+    notice(); recordActivity();
+  } catch (error) {
+    if (generation !== state.generation || expired(error)) return;
+    $('#report-status').textContent = 'Não foi possível atualizar o relatório.';
+    notice(error.message, 'error');
+  } finally { controlsBusy(false); }
+}
 function applySession(data) {
   if (typeof data.csrfToken !== 'string' || data.csrfToken.length < 16) throw new Error('A área de solicitações ainda precisa ser configurada pela TI.');
   state.csrfToken = data.csrfToken;
@@ -245,7 +406,7 @@ async function refreshSession(load = true) {
     const result = await api('session.php');
     if (generation !== state.generation) return;
     applySession(result);
-    if (load && state.authenticated) await loadRequests(1);
+    if (load && state.authenticated) await loadActiveView(true);
     else if (load) notice();
   } catch (error) {
     if (generation !== state.generation) return;
@@ -284,7 +445,7 @@ loginForm.addEventListener('submit', async event => {
     applySession(result);
     if (!state.authenticated) throw new Error('Não foi possível acessar. Confira a senha e tente novamente.');
     controlsBusy(false);
-    await loadRequests(1);
+    await loadActiveView(true);
     $('#page-title').focus();
   } catch (error) {
     password.value = '';
@@ -294,6 +455,25 @@ loginForm.addEventListener('submit', async event => {
     password.focus();
   } finally { controlsBusy(false); loginButton.textContent = 'Entrar nas solicitações →'; }
 });
+$('#report-year').value = new Intl.DateTimeFormat('en', {year: 'numeric', timeZone: 'America/Sao_Paulo'}).format(new Date());
+for (const view of ['requests', 'reports']) {
+  const tab = $('#' + view + '-tab');
+  tab.addEventListener('click', () => {
+    if (state.busy || !state.authenticated || state.view === view) return;
+    setView(view); notice(); void loadActiveView();
+  });
+  tab.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) || state.busy) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 'requests' : event.key === 'End' ? 'reports' : view === 'requests' ? 'reports' : 'requests';
+    $('#' + next + '-tab').click(); $('#' + next + '-tab').focus();
+  });
+}
+$('#refresh-reports').addEventListener('click', () => { void loadReports(); });
+$('#report-year').addEventListener('change', () => { void loadReports(); });
+$('#report-year').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); void loadReports(); } });
+$('#close-copy').addEventListener('click', () => $('#copy-dialog').close());
+$('#copy-dialog').addEventListener('close', () => { $('#copy-text').value = ''; });
 logoutButton.addEventListener('click', () => { void logout(); });
 filter.addEventListener('change', () => { void loadRequests(1); });
 refreshButton.addEventListener('click', () => { void loadRequests(); });

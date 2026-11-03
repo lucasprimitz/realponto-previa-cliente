@@ -159,6 +159,47 @@ $malformedMail = ['id' => $malformedReceipt['id'], 'receivedAt' => $now->format(
 check(str_contains(Mail::body($malformedMail), 'CPF / CNPJ: 123?ABC') && str_contains(Mail::html($malformedMail), '123?ABC'), 'Documento malformado deve acompanhar os dados no e-mail.');
 $storedDocument = null;
 
+
+// Relatórios: consideram todo o ano, fuso de São Paulo e valor histórico da opção escolhida.
+$reportSettings = $settings; $reportSettings['dataDirectory'] = $testDirectory . '/reports';
+$reportStore = new Store(new Config($reportSettings));
+$reportSequence = 0;
+$reportInsert = function (string $received, string $method, ?int $total = 10000, ?int $pix = 9500, string $status = 'priced') use ($reportStore, $request, &$reportSequence): array {
+    $sample = $request; $sample['createdAt'] = $received; $sample['payment']['method'] = $method;
+    $sample['estimate'] = ['status' => $status, 'totalCents' => $total, 'pixCents' => $pix, 'boletoInstallmentCents' => 1667, 'cardInstallmentCents' => 1000];
+    return $reportStore->create($sample, str_pad('report-' . ++$reportSequence, 32, 'x'));
+};
+for ($i = 0; $i < 28; $i++) {
+    $receipt = $reportInsert('2031-01-15T12:00:00Z', $i % 2 === 0 ? 'pix' : 'boleto');
+    if ($i < 3) $reportStore->update(['id' => $receipt['id'], 'handled' => true, 'note' => 'Observação privada', 'version' => 1]);
+}
+$reportInsert('2031-01-01T02:59:59Z', 'boleto', 1100); // Ainda dezembro de 2030 no Brasil.
+$reportInsert('2031-01-01T03:00:00Z', 'boleto', 500);
+$reportInsert('2031-02-01T02:59:59Z', 'pix', 700, 665); // Ainda janeiro no Brasil.
+$reportInsert('2031-02-01T03:00:00Z', 'credit-card', 800);
+$reportInsert('2032-01-01T02:59:59Z', 'boleto', 900); // Ainda dezembro de 2031 no Brasil.
+$reportInsert('2032-01-01T03:00:00Z', 'boleto', 1200);
+$reportInsert('2031-03-10T12:00:00Z', 'boleto', null, null, 'consultation');
+$reportInsert('2031-04-10T12:00:00Z', 'pix', 10000, null); // Sem estimativa Pix, não inventar valor.
+$reportInsert('2031-05-10T12:00:00Z', 'credit-card', 0, 0);
+$report = $reportStore->reports(2031);
+check($report['year'] === 2031 && $report['timeZone'] === 'America/Sao_Paulo' && count($report['months']) === 12, 'Relatório deve identificar ano e fuso e preencher os doze meses.');
+check(count($reportStore->listing(1, 'all')['items']) === 25 && $report['total']['count'] === 35, 'Relatório deve incluir registros de todas as páginas, sem filtros da lista.');
+check($report['months'][0] === ['month' => '2031-01', 'count' => 30, 'pricedCount' => 30, 'consultationCount' => 0, 'totalCents' => 274165, 'handledCount' => 3], 'Janeiro deve respeitar limites locais e somar Pix líquido e boleto sem arredondar parcelas.');
+check($report['months'][1]['count'] === 1 && $report['months'][1]['totalCents'] === 800 && $report['months'][11]['totalCents'] === 900, 'Viradas de mês e ano devem usar São Paulo.');
+check($report['months'][2]['consultationCount'] === 1 && $report['months'][3]['consultationCount'] === 1, 'Solicitações sob consulta ou sem valor disponível não entram no total monetário.');
+check($report['months'][4]['pricedCount'] === 1 && $report['months'][4]['totalCents'] === 0, 'Zero gravado é uma estimativa válida, diferente de valor desconhecido.');
+check($report['total'] === ['count' => 35, 'pricedCount' => 33, 'consultationCount' => 2, 'totalCents' => 275865, 'handledCount' => 3], 'Total anual deve reconciliar com os meses e não multiplicar parcelas arredondadas.');
+check($report['months'][5]['count'] === 0 && $report['months'][5]['totalCents'] === 0, 'Mês vazio deve continuar visível.');
+$emptyReport = $reportStore->reports(2029);
+check($emptyReport['total']['count'] === 0 && count($emptyReport['months']) === 12, 'Ano sem solicitações deve retornar relatório vazio estruturado.');
+$reportJson = json_encode($report, JSON_THROW_ON_ERROR);
+foreach (['Cliente de Teste', 'Empresa de Teste', 'teste@example.invalid', '12345678909', 'Observação privada', 'RP-'] as $privateValue) check(!str_contains($reportJson, $privateValue), 'Relatório agregado não pode expor contatos, protocolos ou observações.');
+foreach ([1999, 2101] as $invalidYear) problem(fn() => $reportStore->reports($invalidYear), 422);
+unset($reportInsert, $reportStore); gc_collect_cycles();
+foreach (['contacts.sqlite', 'contacts.sqlite-wal', 'contacts.sqlite-shm'] as $name) @unlink($reportSettings['dataDirectory'] . '/' . $name);
+@rmdir($reportSettings['dataDirectory']);
+
 echo "OK: {$checks} verificações; " . count($fixtures) . " cenários de preço; nenhum e-mail real enviado.\n";
 // Arquivos temporários exclusivos do teste, sem remoção recursiva de caminhos externos.
 $store = null; unset($mail); gc_collect_cycles();
