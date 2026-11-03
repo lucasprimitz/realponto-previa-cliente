@@ -7,7 +7,18 @@ final class Store {
     public function __construct(private readonly Config $config) {
         $this->db = new \PDO('sqlite:' . rtrim($config->get('dataDirectory'), '/\\') . '/contacts.sqlite', null, null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC]);
         $this->db->exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
-        $this->db->exec('CREATE TABLE IF NOT EXISTS requests (id TEXT PRIMARY KEY, key_hash TEXT NOT NULL UNIQUE, input_hash TEXT NOT NULL, payload TEXT NOT NULL, note TEXT NOT NULL, received_at TEXT NOT NULL, handled INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 1, mail_status TEXT NOT NULL, mail_attempts INTEGER NOT NULL DEFAULT 0, next_attempt INTEGER NOT NULL DEFAULT 0, mail_error TEXT, mailed_at TEXT); CREATE TABLE IF NOT EXISTS rate_limits (bucket TEXT PRIMARY KEY, counter INTEGER NOT NULL, expires INTEGER NOT NULL);');
+        $this->db->exec('CREATE TABLE IF NOT EXISTS requests (id TEXT PRIMARY KEY, key_hash TEXT NOT NULL UNIQUE, input_hash TEXT NOT NULL, payload TEXT NOT NULL, note TEXT NOT NULL, received_at TEXT NOT NULL, handled INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 1, mail_status TEXT NOT NULL, mail_attempts INTEGER NOT NULL DEFAULT 0, next_attempt INTEGER NOT NULL DEFAULT 0, mail_error TEXT, mailed_at TEXT, archived INTEGER NOT NULL DEFAULT 0, archived_at TEXT); CREATE TABLE IF NOT EXISTS rate_limits (bucket TEXT PRIMARY KEY, counter INTEGER NOT NULL, expires INTEGER NOT NULL);');
+        // Legacy databases are upgraded once; recheck under a write lock for concurrent requests.
+        $columns = array_column($this->db->query('PRAGMA table_info(requests)')->fetchAll(), 'name');
+        if (!in_array('archived', $columns, true) || !in_array('archived_at', $columns, true)) {
+            $this->db->exec('BEGIN IMMEDIATE');
+            try {
+                $columns = array_column($this->db->query('PRAGMA table_info(requests)')->fetchAll(), 'name');
+                if (!in_array('archived', $columns, true)) $this->db->exec('ALTER TABLE requests ADD COLUMN archived INTEGER NOT NULL DEFAULT 0');
+                if (!in_array('archived_at', $columns, true)) $this->db->exec('ALTER TABLE requests ADD COLUMN archived_at TEXT');
+                $this->db->exec('COMMIT');
+            } catch (\Throwable $error) { $this->db->exec('ROLLBACK'); throw $error; }
+        }
         @chmod(rtrim($config->get('dataDirectory'), '/\\') . '/contacts.sqlite', 0600);
     }
     public function encrypt(string $plain): string {
@@ -49,11 +60,12 @@ final class Store {
         return ['ok' => true, 'id' => $row['id'], 'receivedAt' => $row['received_at'], 'mailStatus' => $row['mail_status'], 'created' => $created];
     }
     public function item(array $row): array {
-        return ['id' => $row['id'], 'receivedAt' => $row['received_at'], 'handled' => (bool)$row['handled'], 'note' => $this->decrypt($row['note']), 'version' => (int)$row['version'], 'mailStatus' => $row['mail_status'], 'mailAttempts' => (int)$row['mail_attempts'], 'request' => json_decode($this->decrypt($row['payload']), true, 32, JSON_THROW_ON_ERROR)];
+        return ['id' => $row['id'], 'receivedAt' => $row['received_at'], 'handled' => (bool)$row['handled'], 'archived' => (bool)$row['archived'], 'archivedAt' => $row['archived_at'], 'note' => $this->decrypt($row['note']), 'version' => (int)$row['version'], 'mailStatus' => $row['mail_status'], 'mailAttempts' => (int)$row['mail_attempts'], 'request' => json_decode($this->decrypt($row['payload']), true, 32, JSON_THROW_ON_ERROR)];
     }
     public function listing(int $page, string $status): array {
-        if ($page < 1 || $page > 100000 || !in_array($status, ['all', 'pending', 'handled'], true)) throw new Problem(422, 'Filtro inválido.');
-        $where = $status === 'all' ? '' : (' WHERE handled=' . ($status === 'handled' ? '1' : '0'));
+        if ($page < 1 || $page > 100000 || !in_array($status, ['all', 'pending', 'handled', 'archived'], true)) throw new Problem(422, 'Filtro inválido.');
+        $where = $status === 'archived' ? ' WHERE archived=1' : ' WHERE archived=0';
+        if (in_array($status, ['pending', 'handled'], true)) $where .= ' AND handled=' . ($status === 'handled' ? '1' : '0');
         $total = (int)$this->db->query('SELECT COUNT(*) FROM requests' . $where)->fetchColumn();
         $statement = $this->db->prepare('SELECT * FROM requests' . $where . ' ORDER BY received_at DESC,id DESC LIMIT 25 OFFSET ?');
         $statement->bindValue(1, ($page - 1) * 25, \PDO::PARAM_INT); $statement->execute();
@@ -70,7 +82,7 @@ final class Store {
         $months = [];
         for ($month = 1; $month <= 12; $month++) $months[] = ['month' => sprintf('%04d-%02d', $year, $month)] + $empty;
         $total = $empty;
-        $statement = $this->db->prepare('SELECT received_at,handled,payload FROM requests WHERE received_at >= ? AND received_at < ? ORDER BY received_at,id');
+        $statement = $this->db->prepare('SELECT received_at,handled,payload FROM requests WHERE archived=0 AND received_at >= ? AND received_at < ? ORDER BY received_at,id');
         $statement->execute([$start->setTimezone($utc)->format('Y-m-d\TH:i:s\Z'), $end->setTimezone($utc)->format('Y-m-d\TH:i:s\Z')]);
         while ($row = $statement->fetch()) {
             $monthIndex = (int)(new \DateTimeImmutable($row['received_at']))->setTimezone($zone)->format('n') - 1;
@@ -94,10 +106,18 @@ final class Store {
         $statement->closeCursor();
         return ['ok' => true, 'year' => $year, 'timeZone' => 'America/Sao_Paulo', 'months' => $months, 'total' => $total];
     }
+    public function archive(array $input): array {
+        if (!is_string($input['id'] ?? null) || !preg_match('/^RP-[A-F0-9]{24}$/D', $input['id']) || !is_bool($input['archived'] ?? null) || !is_int($input['version'] ?? null) || $input['version'] < 1) throw new Problem(422, 'Atualização inválida.');
+        $statement = $this->db->prepare('UPDATE requests SET archived=?,archived_at=?,version=version+1 WHERE id=? AND version=? AND archived<>?');
+        $statement->execute([(int)$input['archived'], $input['archived'] ? gmdate('Y-m-d\TH:i:s\Z') : null, $input['id'], $input['version'], (int)$input['archived']]);
+        if ($statement->rowCount() !== 1) throw new Problem(409, 'Essa solicitação foi alterada. Atualize a lista antes de tentar novamente.');
+        $find = $this->db->prepare('SELECT * FROM requests WHERE id=?'); $find->execute([$input['id']]);
+        return ['ok' => true, 'item' => $this->item($find->fetch())];
+    }
     public function update(array $input): array {
         if (!is_string($input['id'] ?? null) || !preg_match('/^RP-[A-F0-9]{24}$/D', $input['id']) || !is_bool($input['handled'] ?? null) || !is_int($input['version'] ?? null) || $input['version'] < 1) throw new Problem(422, 'Atualização inválida.');
         $note = Domain::note($input['note'] ?? null);
-        $statement = $this->db->prepare('UPDATE requests SET handled=?,note=?,version=version+1 WHERE id=? AND version=?');
+        $statement = $this->db->prepare('UPDATE requests SET handled=?,note=?,version=version+1 WHERE id=? AND version=? AND archived=0');
         $statement->execute([(int)$input['handled'], $this->encrypt($note), $input['id'], $input['version']]);
         if ($statement->rowCount() !== 1) throw new Problem(409, 'Essa solicitação foi alterada. Atualize a lista antes de salvar.');
         $find = $this->db->prepare('SELECT * FROM requests WHERE id=?'); $find->execute([$input['id']]);

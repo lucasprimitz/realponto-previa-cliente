@@ -9,6 +9,7 @@ const loginButton = $('#login-button');
 const password = $('#password');
 const message = $('#status-message');
 const filter = $('#status-filter');
+filter.value = 'all';
 const refreshButton = $('#refresh');
 const previousButton = $('#previous-page');
 const nextButton = $('#next-page');
@@ -17,6 +18,7 @@ const idleMilliseconds = 15 * 60 * 1000;
 let idleTimer;
 let apiBase;
 let requestCardSequence = 0;
+let archiveSelection = null;
 
 function notice(text = '', kind = '') {
   message.textContent = text;
@@ -46,6 +48,7 @@ function clearPrivateView() {
   state.generation++;
   state.authenticated = false;
   state.lastActivity = 0;
+  filter.value = 'all';
   clearTimeout(idleTimer);
   list.replaceChildren();
   $('#report-metrics').replaceChildren();
@@ -55,6 +58,8 @@ function clearPrivateView() {
   $('#report-table-wrap').hidden = true;
   $('#copy-text').value = '';
   if ($('#copy-dialog').open) $('#copy-dialog').close();
+  archiveSelection = null;
+  if ($('#archive-dialog').open) $('#archive-dialog').close();
   password.value = '';
   $('#request-count').textContent = '0';
   $('#list-status').textContent = '';
@@ -137,18 +142,17 @@ function renderItem(item) {
   back.setAttribute('aria-hidden', 'true');
   const top = textElement('div', 'request-top', '');
   const heading = textElement('div', 'request-heading', '');
-  const headingTitle = textElement('h2', '', safeText(contact.company, 'Solicitação de proposta'));
+  const titleRow = textElement('div', 'request-title-row', '');
+  const headingTitle = textElement('h2', '', safeText(contact.company));
+  const protocol = textElement('p', 'request-id', 'Protocolo: ' + safeText(item.id));
+  titleRow.append(headingTitle, protocol);
   const meta = textElement('p', 'request-meta', receivedDate(item.receivedAt));
-  heading.append(headingTitle, meta);
+  heading.append(titleRow, meta);
   const actions = textElement('div', 'request-actions', '');
-  const badge = textElement('span', 'pill' + (item.handled ? ' handled' : ''), item.handled ? 'Encaminhada' : 'Pendente');
+  const badge = textElement('span', 'pill' + (item.archived ? ' inactive' : item.handled ? ' handled' : ''), item.archived ? 'Inativa' : item.handled ? 'Encaminhada' : 'Pendente');
   const copy = textElement('button', 'button copy-button', 'Copiar solicitação');
   copy.type = 'button';
   copy.setAttribute('aria-label', 'Copiar todas as informações de ' + safeText(contact.company, 'esta solicitação'));
-  const copyStatus = textElement('p', 'copy-status', '');
-  copyStatus.setAttribute('role', 'status');
-  copyStatus.setAttribute('aria-live', 'polite');
-  copyStatus.hidden = true;
   copy.addEventListener('click', async () => {
     if (!state.authenticated) return;
     const text = buildRequestText(item);
@@ -158,9 +162,6 @@ function renderItem(item) {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
       await navigator.clipboard.writeText(text);
       if (generation !== state.generation || !state.authenticated) return;
-      copyStatus.textContent = 'Resumo completo copiado. Pronto para colar.';
-      copyStatus.className = 'copy-status';
-      copyStatus.hidden = false;
       recordActivity();
     } catch {
       if (generation !== state.generation || !state.authenticated) return;
@@ -168,11 +169,11 @@ function renderItem(item) {
       $('#copy-dialog').showModal();
       $('#copy-text').focus();
       $('#copy-text').select();
-      copyStatus.textContent = 'Use o texto aberto para copiar a solicitação.';
-      copyStatus.hidden = false;
     } finally { copy.disabled = false; }
   });
-  actions.append(badge, copy);
+  const statuses = textElement('div', 'request-statuses', '');
+  statuses.append(badge);
+  actions.append(statuses, copy);
   top.append(heading, actions);
   const body = textElement('div', 'request-body', '');
   const investment = textElement('section', 'investment-card', '');
@@ -188,8 +189,8 @@ function renderItem(item) {
   const person = section('Contato');
   addDetail(person.dl, 'Nome', safeText(contact.name));
   addDetail(person.dl, 'Telefone / WhatsApp', formatPhone(contact.phone) || 'Não informado');
-  addDetail(person.dl, 'E-mail', safeText(contact.email), contact.taxId ? '' : 'wide');
-  if (contact.taxId) addDetail(person.dl, 'CPF / CNPJ', formatTaxId(contact.taxId));
+  addDetail(person.dl, 'E-mail', safeText(contact.email));
+  addDetail(person.dl, 'CPF / CNPJ', safeText(formatTaxId(contact.taxId)));
   const showDetails = textElement('button', 'request-details-button', 'Ver configuração e valores');
   showDetails.type = 'button';
   showDetails.setAttribute('aria-controls', back.id);
@@ -197,7 +198,7 @@ function renderItem(item) {
   const backTop = textElement('div', 'request-back-top', '');
   const returnButton = textElement('button', 'button secondary return-button', 'Voltar à solicitação');
   returnButton.type = 'button';
-  backTop.append(returnButton, textElement('h3', '', 'Configuração e valores'), textElement('p', '', safeText(contact.company, 'Solicitação de proposta')));
+  backTop.append(returnButton, textElement('h3', '', 'Configuração e valores'), textElement('p', '', safeText(contact.company)));
   const details = textElement('div', 'request-back-content', '');
   details.tabIndex = 0;
   details.setAttribute('role', 'region');
@@ -206,9 +207,9 @@ function renderItem(item) {
   addDetail(scope.dl, 'Sistema', systemLabel(configuration.system));
   addDetail(scope.dl, 'Horários a cadastrar', quantity(configuration.schedules, 100));
   addDetail(scope.dl, 'Funcionários a reagendar', quantity(configuration.employees, 1000));
-  addDetail(scope.dl, 'Banco de horas', configuration.bankHours === true ? 'Sim' : 'Não');
-  addDetail(scope.dl, 'Escalas', configuration.workScale === true ? 'Sim' : 'Não');
-  addDetail(scope.dl, 'Inativação dos horários antigos', configuration.system === 'secullum-offline' ? 'Não contemplada no Secullum Offline' : 'Incluída', 'wide');
+  addDetail(scope.dl, 'Banco de horas', typeof configuration.bankHours === 'boolean' ? (configuration.bankHours ? 'Sim' : 'Não') : 'Não informado');
+  addDetail(scope.dl, 'Escalas', typeof configuration.workScale === 'boolean' ? (configuration.workScale ? 'Sim' : 'Não') : 'Não informado');
+  addDetail(scope.dl, 'Inativação dos horários antigos', configuration.system === 'secullum-offline' ? 'Não contemplada no Secullum Offline' : ['secullum-rh', 'rhid', 'iponto'].includes(configuration.system) ? 'Incluída' : 'Não informado', 'wide');
   const values = section('Estimativa e opções de pagamento');
   addDetail(values.dl, estimate.campaignDiscountApplied ? 'Total com a campanha' : 'Total da parametrização', amount(estimate.totalCents));
   if (estimate.campaignDiscountApplied) {
@@ -218,7 +219,7 @@ function renderItem(item) {
   addDetail(values.dl, 'Pix', amount(estimate.pixCents));
   addDetail(values.dl, 'Boleto · sob consulta', Number.isSafeInteger(estimate.boletoInstallmentCents) ? '6x de ' + amount(estimate.boletoInstallmentCents) : 'Valor sob consulta');
   addDetail(values.dl, 'Cartão · sem juros', Number.isSafeInteger(estimate.cardInstallmentCents) ? '10x de ' + amount(estimate.cardInstallmentCents) : 'Valor sob consulta');
-  details.append(scope.container, values.container, textElement('p', 'request-id', 'Protocolo: ' + safeText(item.id, '—')));
+  details.append(scope.container, values.container);
   back.append(backTop, details);
   function flipCard(flipped) {
     card.classList.toggle('is-flipped', flipped);
@@ -237,14 +238,16 @@ function renderItem(item) {
   back.addEventListener('keydown', event => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); flipCard(false); }
   });
-  body.append(investment, person.container, showDetails, copyStatus);
-  const delivery = textElement('p', '', '');
+  body.append(investment, person.container, showDetails);
+  const delivery = textElement('span', '', '');
   function updateDelivery() {
     delivery.className = 'delivery-state ' + (item.mailStatus === 'sent' ? 'sent' : 'not-sent');
-    delivery.textContent = displayDelivery(item.mailStatus);
+    delivery.textContent = ({sent: 'E-mail enviado', pending: 'E-mail na fila', failed: 'Falha no e-mail', disabled: 'E-mail não configurado'})[item.mailStatus] ?? 'E-mail não informado';
+    delivery.title = displayDelivery(item.mailStatus);
+    delivery.setAttribute('aria-label', displayDelivery(item.mailStatus));
   }
   updateDelivery();
-  body.append(delivery);
+  statuses.append(delivery);
   const edit = textElement('form', 'request-edit', '');
   const handledLabel = textElement('label', 'handled-label', '');
   const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = item.handled === true;
@@ -254,11 +257,24 @@ function renderItem(item) {
   noteGroup.append(textElement('span', 'note-label', 'Responsável / observação'), note);
   const save = textElement('button', 'button primary', 'Salvar'); save.type = 'submit';
   const saveMessage = textElement('p', 'save-message', ''); saveMessage.setAttribute('role', 'status'); saveMessage.setAttribute('aria-live', 'polite'); saveMessage.hidden = true;
-  edit.append(handledLabel, noteGroup, save, saveMessage);
+  const archiveButton = textElement('button', 'button archive-button' + (item.archived ? ' restore-button' : ''), item.archived ? 'Restaurar' : 'Inativar');
+  archiveButton.type = 'button';
+  archiveButton.setAttribute('aria-label', (item.archived ? 'Restaurar solicitação de ' : 'Inativar solicitação de ') + safeText(contact.company, 'esta empresa'));
+  archiveButton.addEventListener('click', () => {
+    if (save.disabled || state.busy || !state.authenticated) return;
+    openArchiveDialog(item, archiveButton, checkbox.checked !== item.handled || note.value.trim() !== (item.note ?? ''));
+  });
+  const editActions = textElement('div', 'request-edit-actions', '');
+  editActions.append(archiveButton, save);
+  if (item.archived) {
+    save.hidden = true;
+    const archivedNote = textElement('p', 'archived-card-note', 'Fora dos relatórios. Restaure para retomar o atendimento.');
+    edit.append(archivedNote, editActions);
+  } else edit.append(handledLabel, noteGroup, editActions, saveMessage);
   edit.addEventListener('submit', async event => {
     event.preventDefault();
-    if (save.disabled || !state.authenticated) return;
-    save.disabled = true; checkbox.disabled = true; note.disabled = true;
+    if (save.disabled || state.busy || item.archived || !state.authenticated) return;
+    save.disabled = true; archiveButton.disabled = true; checkbox.disabled = true; note.disabled = true;
     save.textContent = 'Salvando…'; saveMessage.hidden = true;
     const generation = state.generation;
     try {
@@ -276,7 +292,7 @@ function renderItem(item) {
       saveMessage.textContent = error.status === 409 ? 'Outra pessoa alterou esta solicitação. Atualize a lista antes de salvar novamente.' : error.message;
       saveMessage.className = 'save-message error'; saveMessage.hidden = false;
     } finally {
-      save.disabled = false; checkbox.disabled = false; note.disabled = false; save.textContent = 'Salvar';
+      save.disabled = false; archiveButton.disabled = false; checkbox.disabled = false; note.disabled = false; save.textContent = 'Salvar';
     }
   });
   front.append(top, body, edit);
@@ -289,7 +305,11 @@ async function loadRequests(page = state.page) {
   $('#list-status').textContent = 'Carregando solicitações…';
   const generation = ++state.generation;
   try {
-    const result = await api('requests.php?page=' + page + '&status=' + encodeURIComponent(filter.value));
+    let result = await api('requests.php?page=' + page + '&status=' + encodeURIComponent(filter.value));
+    if (generation !== state.generation || !state.authenticated) return;
+    if (Number.isSafeInteger(result.totalPages) && page > result.totalPages && result.totalPages > 0) {
+      result = await api('requests.php?page=' + result.totalPages + '&status=' + encodeURIComponent(filter.value));
+    }
     if (generation !== state.generation || !state.authenticated) return;
     if (!Array.isArray(result.items) || !Number.isSafeInteger(result.total)) throw new Error('Não foi possível carregar a lista. Fale com a TI.');
     state.page = Number.isSafeInteger(result.page) ? result.page : page;
@@ -297,17 +317,95 @@ async function loadRequests(page = state.page) {
     list.replaceChildren(...result.items.map(renderItem));
     $('#request-count').textContent = new Intl.NumberFormat('pt-BR').format(result.total);
     $('#empty-list').hidden = result.items.length > 0;
+    $('#inactive-help').hidden = filter.value !== 'archived';
+    $('#empty-list h2').textContent = filter.value === 'archived' ? 'Nenhuma solicitação inativa.' : 'Nenhuma solicitação por aqui.';
+    $('#empty-list p').textContent = filter.value === 'archived' ? 'As solicitações inativadas aparecerão aqui e poderão ser restauradas.' : 'Os novos contatos aparecerão nesta área após o envio pelo formulário.';
     $('#pagination').hidden = state.totalPages <= 1;
     $('#page-indicator').textContent = 'Página ' + state.page + ' de ' + state.totalPages;
     $('#list-status').textContent = result.items.length ? result.items.length + (result.items.length === 1 ? ' solicitação exibida.' : ' solicitações exibidas.') : '';
     notice();
     recordActivity();
+    return true;
   } catch (error) {
-    if (generation !== state.generation || expired(error)) return;
+    if (generation !== state.generation || expired(error)) return false;
     $('#list-status').textContent = '';
     notice(error.message, 'error');
+    return false;
   } finally { controlsBusy(false); }
 }
+function openArchiveDialog(item, trigger, unsaved) {
+  const restoring = item.archived === true;
+  archiveSelection = {id: item.id, version: item.version, archived: !restoring, trigger};
+  $('#archive-title').textContent = restoring ? 'Restaurar solicitação?' : 'Inativar solicitação?';
+  $('#archive-company').textContent = safeText(item.request?.contact?.company);
+  $('#archive-description').textContent = restoring
+    ? 'A solicitação voltará para a lista de atendimento e para as quantidades e valores dos relatórios, no mês em que foi recebida. Os dados e o encaminhamento serão preservados.'
+    : 'Esta solicitação ficará fora da lista de atendimento e das quantidades e valores dos relatórios. Os dados serão preservados e você poderá restaurá-la pelo filtro Inativas.';
+  $('#archive-unsaved').hidden = !unsaved;
+  $('#archive-error').hidden = true;
+  $('#confirm-archive').className = 'button ' + (restoring ? 'primary' : 'danger');
+  $('#confirm-archive').textContent = restoring ? 'Restaurar solicitação' : 'Inativar solicitação';
+  $('#archive-dialog').showModal();
+  $('#cancel-archive').focus();
+}
+$('#cancel-archive').addEventListener('click', () => { if (!state.busy) $('#archive-dialog').close(); });
+$('#archive-dialog').addEventListener('cancel', event => { if (state.busy) event.preventDefault(); });
+$('#archive-dialog').addEventListener('close', () => {
+  const trigger = archiveSelection?.trigger;
+  archiveSelection = null;
+  $('#archive-company').textContent = '';
+  $('#archive-error').textContent = '';
+  if (state.authenticated && trigger?.isConnected) trigger.focus({preventScroll: true});
+});
+$('#confirm-archive').addEventListener('click', async () => {
+  if (!archiveSelection || state.busy || !state.authenticated) return;
+  const selection = archiveSelection;
+  const generation = state.generation;
+  controlsBusy(true);
+  $('#confirm-archive').disabled = true;
+  $('#cancel-archive').disabled = true;
+  $('#archive-error').hidden = true;
+  $('#confirm-archive').textContent = selection.archived ? 'Inativando…' : 'Restaurando…';
+  try {
+    const result = await api('request-archive.php', {method: 'POST', body: {id: selection.id, version: selection.version, archived: selection.archived}});
+    if (generation !== state.generation || !state.authenticated) return;
+    if (result.item?.archived !== selection.archived || result.item?.id !== selection.id) throw new Error('Não foi possível confirmar a alteração. Atualize a lista.');
+    $('#archive-dialog').close();
+    controlsBusy(false);
+    list.replaceChildren();
+    $('#request-count').textContent = '—';
+    $('#pagination').hidden = true;
+    const reloaded = await loadRequests();
+    if (!state.authenticated) return;
+    if (!reloaded) {
+      notice((selection.archived ? 'Solicitação inativada.' : 'Solicitação restaurada.') + ' A alteração foi salva, mas não foi possível recarregar a lista. Clique em Atualizar lista.', 'error');
+      refreshButton.focus({preventScroll: true});
+      return;
+    }
+    notice(selection.archived ? 'Solicitação inativada. Ela não entra mais nos relatórios e pode ser restaurada no filtro Inativas.' : 'Solicitação restaurada. Ela voltou para a lista e para os relatórios.', 'success');
+    filter.focus({preventScroll: true});
+    recordActivity();
+  } catch (error) {
+    if (generation !== state.generation || expired(error)) return;
+    if (error.status === 409) {
+      $('#archive-dialog').close();
+      controlsBusy(false);
+      list.replaceChildren();
+      $('#request-count').textContent = '—';
+      $('#pagination').hidden = true;
+      const reloaded = await loadRequests();
+      if (state.authenticated) notice(reloaded ? 'Esta solicitação foi alterada por outra pessoa. A lista foi atualizada; confira o registro antes de tentar novamente.' : 'Esta solicitação foi alterada por outra pessoa. Não foi possível recarregar a lista; clique em Atualizar lista antes de tentar novamente.', 'error');
+    } else {
+      $('#archive-error').textContent = error.message;
+      $('#archive-error').hidden = false;
+    }
+  } finally {
+    controlsBusy(false);
+    $('#confirm-archive').disabled = false;
+    $('#cancel-archive').disabled = false;
+    $('#confirm-archive').textContent = selection.archived ? 'Inativar solicitação' : 'Restaurar solicitação';
+  }
+});
 function setView(view) {
   state.view = view;
   const reports = view === 'reports';
@@ -340,7 +438,7 @@ function renderReport(result) {
   const number = value => new Intl.NumberFormat('pt-BR').format(value);
   const average = total.pricedCount ? amount(Math.round(total.totalCents / total.pricedCount)) : '—';
   $('#report-metrics').replaceChildren(
-    reportMetric('Solicitações em ' + result.year, number(total.count), 'Todos os contatos recebidos no ano.'),
+    reportMetric('Solicitações em ' + result.year, number(total.count), 'Contatos ativos recebidos no ano.'),
     reportMetric('Valor estimado no ano', amount(total.totalCents), number(total.pricedCount) + ' solicitações com valor definido.', true),
     reportMetric('Ticket médio estimado', average, 'Média das solicitações com valor definido.'),
     reportMetric('Sob consulta', number(total.consultationCount), 'Aguardam definição do valor da proposta.')
@@ -362,7 +460,7 @@ function renderReport(result) {
   $('#report-total').replaceChildren(totalRow);
   $('#report-caption').textContent = 'Solicitações recebidas por mês · ' + result.year;
   $('#report-table-wrap').hidden = false;
-  $('#report-status').textContent = total.count ? 'Relatório atualizado. Todas as solicitações do ano estão incluídas, independentemente do filtro da lista.' : 'Nenhuma solicitação recebida neste ano.';
+  $('#report-status').textContent = total.count ? 'Relatório atualizado. Inclui somente solicitações ativas do ano, independentemente do filtro da lista.' : 'Nenhuma solicitação ativa recebida neste ano.';
 }
 async function loadReports() {
   if (!state.authenticated || state.busy) return;

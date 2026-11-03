@@ -22,7 +22,7 @@ async function writeConfig(value = configuration) { await fs.writeFile(configPat
 await writeConfig();
 const testEnvironment = {...process.env, CONTACTS_CONFIG_FILE:configPath}; delete testEnvironment.CONTACTS_SUBMISSIONS_ENABLED;
 const server = spawn(php, ['-d', 'opcache.enable=0', '-d', 'opcache.enable_cli=0', '-S', `127.0.0.1:${port}`, '-t', path.join(service, 'public')], {env:testEnvironment, stdio:['ignore','pipe','pipe'], windowsHide:true});
-let logs=''; server.stderr.on('data', data=>{logs=(logs+data.toString()).slice(-4000);}); server.stdout.on('data', ()=>{});
+let logs=''; server.on('error', error=>{logs += error.message;}); server.stderr.on('data', data=>{logs=(logs+data.toString()).slice(-4000);}); server.stdout.on('data', ()=>{});
 let checks=0;
 function check(actual, expected, label) { assert.deepEqual(actual, expected, label); checks++; }
 class Client {
@@ -37,8 +37,8 @@ class Client {
 }
 const request={schemaVersion:1,createdAt:'1900-01-01',contact:{name:'Teste HTTP',company:'Empresa Exemplo',email:'teste@example.invalid',phone:'11999999999',taxId:null},configuration:{system:'iponto',schedules:10,employees:40,bankHours:true,workScale:false},payment:{method:'pix',label:'fake'},estimate:{totalCents:1},consent:true};
 try {
-  let ready=false; for(let i=0;i<100;i++){try{await fetch(`${origin}/api/session.php`);ready=true;break;}catch{await new Promise(resolve=>setTimeout(resolve,50));}}
-  assert.ok(ready,logs);
+  let ready=false; const readinessDeadline=Date.now()+60000; while(Date.now()<readinessDeadline && server.exitCode===null){try{await fetch(`${origin}/api/session.php`,{signal:AbortSignal.timeout(1000)});ready=true;break;}catch{await new Promise(resolve=>setTimeout(resolve,50));}}
+  assert.ok(ready,`PHP startup timed out or exited (${server.exitCode}): ${logs}`);
   const customer=new Client(), admin=new Client(), stranger=new Client();
   let result=await customer.call('session.php'); check(result.status,200,'Sessão pública'); check(result.body.authenticated,false,'Sessão começa sem login');
   assert.match(result.headers.get('set-cookie'),/HttpOnly/i); assert.match(result.headers.get('set-cookie'),/SameSite=Strict/i); checks+=2;
@@ -77,6 +77,30 @@ try {
   result=await admin.call('request-update.php',{method:'POST',data:{id:item.id,handled:true,note:'Ana',version:1}}); check(result.status,200,'Acompanhamento salvo'); check(result.body.item.version,2,'Versão avança');
   check((await admin.call('request-update.php',{method:'POST',data:{id:item.id,handled:false,note:'',version:1}})).status,409,'Alteração concorrente não sobrescreve');
   check((await admin.call('requests.php?status=pending')).body.total,0,'Filtro pendentes'); check((await admin.call('requests.php?status=handled')).body.total,1,'Filtro encaminhados');
+
+  const archivePayload = {id:item.id,version:2,archived:true};
+  check((await stranger.call('request-archive.php',{method:'POST',data:archivePayload})).status,401,'Inativação exige senha');
+  check((await admin.call('request-archive.php')).status,405,'Inativação não aceita GET');
+  check((await admin.call('request-archive.php',{method:'POST',data:archivePayload,omitCsrf:true})).status,403,'Inativação exige CSRF');
+  check((await admin.call('request-archive.php',{method:'POST',data:archivePayload,omitOrigin:true})).status,403,'Inativação exige origem');
+  check((await admin.call('request-archive.php',{method:'POST',data:archivePayload,headers:{Origin:'https://evil.example.invalid'}})).status,403,'Origem externa não pode inativar');
+  check((await admin.call('request-archive.php',{method:'POST',data:{...archivePayload,archived:'true'}})).status,422,'Estado inativo precisa ser booleano');
+  check((await admin.call('request-archive.php',{method:'POST',data:{...archivePayload,version:'2'}})).status,422,'Versão deve ser inteira');
+  check((await admin.call('request-archive.php',{method:'POST',data:{...archivePayload,version:1}})).status,409,'Inativação concorrente não sobrescreve');
+  result=await admin.call('request-archive.php',{method:'POST',data:archivePayload});
+  check(result.status,200,'Inativação persistida'); check(result.body.item.archived,true,'Estado inativo retornado'); check(result.body.item.version,3,'Inativação avança versão');
+  check(result.body.item.request,item.request,'Contato, configuração e valores preservados'); check(result.body.item.note,'Ana','Observação preservada'); check(result.body.item.mailStatus,'disabled','Inativação não altera entrega de e-mail');
+  check(result.headers.get('cache-control'),'no-store, private','Inativação não deve armazenar dados em cache');
+  check((await admin.call('requests.php?status=all')).body.total,0,'Inativa sai da lista ativa');
+  check((await admin.call('requests.php?status=handled')).body.total,0,'Inativa sai dos encaminhados ativos');
+  result=await admin.call('requests.php?status=archived'); check(result.body.total,1,'Inativos acessíveis pelo filtro'); check(result.body.items[0].id,item.id,'Filtro retorna mesmo protocolo');
+  result=await admin.call('reports.php?year='+reportYear); check(result.body.total.count,0,'Inativa sai da contagem anual'); check(result.body.total.totalCents,0,'Inativa sai do valor anual');
+  check((await admin.call('request-update.php',{method:'POST',data:{id:item.id,handled:false,note:'',version:3}})).status,409,'Inativo não pode ser editado antes de restaurar');
+  check((await admin.call('request-archive.php',{method:'POST',data:{id:item.id,archived:false,version:2}})).status,409,'Restauração exige versão atual');
+  result=await admin.call('request-archive.php',{method:'POST',data:{id:item.id,archived:false,version:3}});
+  check(result.status,200,'Restauração persistida'); check(result.body.item.archived,false,'Restauração reativa solicitação'); check(result.body.item.archivedAt,null,'Data de inativação limpa ao restaurar'); check(result.body.item.version,4,'Restauração avança versão');
+  check((await admin.call('requests.php?status=archived')).body.total,0,'Restauração sai dos inativos'); check((await admin.call('requests.php?status=handled')).body.total,1,'Restauração mantém encaminhamento anterior');
+  result=await admin.call('reports.php?year='+reportYear); check(result.body.total.count,1,'Restauração recompõe contagem'); check(result.body.total.totalCents,item.request.estimate.pixCents,'Restauração recompõe valor histórico');
   check((await admin.call('logout.php',{method:'POST',data:{}})).body.authenticated,false,'Logout aceita objeto vazio');
   check((await admin.call('requests.php')).status,401,'Logout revoga leitura');
   check((await admin.call('reports.php')).status,401,'Logout revoga relatório');
