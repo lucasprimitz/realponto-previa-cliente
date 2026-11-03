@@ -20,9 +20,9 @@ export function amount(cents) {
 }
 
 export function receivedDate(value) {
-  if (typeof value !== 'string' || !value.trim()) return 'Data não disponível';
+  if (typeof value !== 'string' || !value.trim()) return 'Não informado';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Data não disponível' : dateTime.format(date);
+  return Number.isNaN(date.getTime()) ? 'Não informado' : dateTime.format(date);
 }
 
 export function quantity(value, upper) {
@@ -68,7 +68,7 @@ export function selectedPayment(itemOrRequest) {
   const payment = object(request.payment);
   const estimate = pricedEstimate(request);
   const method = payment.method;
-  const label = Object.hasOwn(PAYMENTS, method) ? PAYMENTS[method] : safeText(payment.label, 'Pagamento não informado');
+  const label = Object.hasOwn(PAYMENTS, method) ? PAYMENTS[method] : safeText(payment.label);
   const total = method === 'pix' ? estimate.pixCents : estimate.totalCents;
   const totalCents = validCents(total) ? total : null;
   let value = amount(totalCents);
@@ -108,7 +108,7 @@ export function buildRequestText(value) {
   const knownSystem = Object.hasOwn(SYSTEMS, configuration.system);
   const retirement = configuration.system === 'secullum-offline'
     ? 'Não contemplada no Secullum Offline'
-    : knownSystem ? 'Contemplada pela Realponto' : 'A confirmar conforme o sistema';
+    : knownSystem ? 'Contemplada pela Realponto' : 'Não informado';
   const lines = [
     'REALPONTO · SOLICITAÇÃO DE PROPOSTA',
     'Protocolo: ' + safeText(item.id, 'Não informado'),
@@ -147,9 +147,6 @@ export function buildRequestText(value) {
     'Cartão de crédito: ' + (validCents(estimate.totalCents) && validCents(estimate.cardInstallmentCents) ? '10x de ' + amount(estimate.cardInstallmentCents) : 'Valor sob consulta') + ' — sem juros.',
     'Parcelas aproximadas por arredondamento; condições a confirmar na proposta.',
     '',
-    'ACOMPANHAMENTO',
-    'Encaminhada: ' + yesNo(item.handled),
-    'Responsável / observação: ' + safeText(item.note),
   );
   if (request.consent === true) lines.push('Contato autorizado pelo cliente para esta solicitação.');
   lines.push('', 'O preenchimento não equivale à proposta nem à sua aprovação. Confirmar os dados com o cliente, enviar a proposta e solicitar sua aprovação.');
