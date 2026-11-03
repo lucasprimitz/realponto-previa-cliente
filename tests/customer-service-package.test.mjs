@@ -23,12 +23,15 @@ test('pacote funcional separa o PHP e os segredos dos arquivos públicos e prese
     assert.doesNotMatch(file.file, /(?:sqlite|private|vendor|tests|contacts-config)/);
     if (file.file.startsWith('public/')) {
       assert.ok(!/config|pricing\.json|composer|src\//.test(file.file), file.file);
-      if (file.file.endsWith('.php')) assert.match(file.file, /^public\/api\/(session|requests|login|logout|request-update)\.php$/);
+      if (file.file.endsWith('.php')) assert.match(file.file, /^public\/api\/(session|requests|login|logout|request-update|reports)\.php$/);
     }
   }
   assert.ok(manifest.files.some(item => item.file === 'composer.lock'));
   assert.ok(manifest.files.some(item => item.file === 'SINCRONIZACAO-PRECOS.md'));
   assert.ok(manifest.files.some(item => item.file === 'src/Http.php'));
+  assert.ok(manifest.files.some(item => item.file === 'public/api/reports.php'));
+  assert.ok(manifest.files.some(item => item.file === 'public/contatos/panel-model.mjs'));
+  assert.match(await fs.readFile(path.join(output, 'public/contatos/panel.mjs'), 'utf8'), /from '\.\/panel-model\.mjs'/);
   await assert.rejects(packageCustomerService(output, 'test-functional'), {code: 'EEXIST'});
   const original = await fs.readFile(new URL('../customer-preview/index.html', import.meta.url), 'utf8');
   assert.match(original, /name="realponto-api-base" content=""/);
