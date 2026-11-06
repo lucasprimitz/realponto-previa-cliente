@@ -62,10 +62,17 @@ final class Http {
     }
     public function clearAuthentication(): void { $_SESSION = ['csrf' => bin2hex(random_bytes(32))]; session_regenerate_id(true); }
     public function logout(): array { $this->clearAuthentication(); return $this->state(); }
+    public function recordActivity(array $input): array {
+        if ($this->config->get('submissionsEnabled', false) !== true) throw new Problem(503, 'A atividade está indisponível.');
+        // Rate limiting stores only a transient keyed hash. It never identifies a visitor in the activity table.
+        $this->store->rate('activity-network', $_SERVER['REMOTE_ADDR'] ?? '', 1500, 300);
+        $this->store->rate('activity-global', 'all', 12000, 300);
+        return $this->store->activity->record($input, Domain::load());
+    }
     public function submit(array $input): array {
         if ($this->config->get('submissionsEnabled', false) !== true) throw new Problem(503, 'O recebimento de solicitações ainda não está disponível.');
         $this->store->rate('submit', $_SERVER['REMOTE_ADDR'] ?? '', 10, 3600);
         $this->store->rate('submit-global', 'all', 300, 3600);
-        return $this->store->create(Domain::load()->normalize($input), (string)($_SERVER['HTTP_IDEMPOTENCY_KEY'] ?? ''));
+        return $this->store->create(Domain::load()->normalize($input), (string)($_SERVER['HTTP_IDEMPOTENCY_KEY'] ?? ''), $this->store->activity->identity($input['activity'] ?? null));
     }
 }

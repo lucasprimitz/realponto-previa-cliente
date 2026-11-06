@@ -13,6 +13,8 @@ export function createRequestTransport({apiBase = '', pageUrl = globalThis.locat
     throw new Error('O envio ainda não foi configurado corretamente. Entre em contato com a Realponto.');
   }
   if (typeof fetchImpl !== 'function') throw new Error('Este navegador não oferece suporte ao envio.');
+  let activitySession;
+  let requestActivity;
   let previousFingerprint;
   let idempotencyKey;
   let pending = false;
@@ -30,7 +32,9 @@ export function createRequestTransport({apiBase = '', pageUrl = globalThis.locat
       const body = await response.json().catch(() => null);
       if (!response.ok || !body || body.ok === false) {
         const message = typeof body?.message === 'string' && body.message.length <= 350 ? body.message : 'Não foi possível confirmar o envio. Tente novamente.';
-        throw new Error(message);
+        const error = new Error(message);
+        error.status = response.status;
+        throw error;
       }
       return body;
     } catch (error) {
@@ -42,14 +46,36 @@ export function createRequestTransport({apiBase = '', pageUrl = globalThis.locat
   }
   return Object.freeze({
     mode: 'connected',
-    async submit(request) {
+    async recordActivity(snapshot) {
+      async function post() {
+        activitySession ??= api('session.php', {method: 'GET', headers: {Accept: 'application/json'}});
+        const session = await activitySession;
+        if (!session.csrfToken || session.submissionEnabled !== true) return;
+        await api('activity.php', {
+          method: 'POST', keepalive: true,
+          headers: {Accept: 'application/json', 'Content-Type': 'application/json', 'X-CSRF-Token': session.csrfToken},
+          body: JSON.stringify(snapshot),
+        });
+      }
+      try { await post(); }
+      catch (error) {
+        activitySession = undefined;
+        if (error.status === 403) await post();
+      }
+    },
+    async submit(request, activity) {
       if (pending) throw new Error('Aguarde a confirmação do envio em andamento.');
       // A data e a estimativa local não identificam uma nova solicitação: o servidor as calcula.
       const {createdAt, estimate, ...content} = request;
       const fingerprint = JSON.stringify(stable(content));
-      if (fingerprint !== previousFingerprint) {
+      // A newly started draft may legitimately request identical terms and contact.
+      // If linkage is temporarily unavailable on retry, keep the original body/key.
+      const newDraft = activity && (completed || requestActivity) &&
+        (activity.simulationId !== requestActivity?.simulationId || activity.browserId !== requestActivity?.browserId);
+      if (fingerprint !== previousFingerprint || newDraft) {
         previousFingerprint = fingerprint;
         idempotencyKey = randomId();
+        requestActivity = activity;
         completed = undefined;
       }
       if (completed) return completed;
@@ -60,7 +86,7 @@ export function createRequestTransport({apiBase = '', pageUrl = globalThis.locat
         const result = await api('requests.php', {
           method: 'POST',
           headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-Token': session.csrfToken, 'Idempotency-Key': idempotencyKey},
-          body: JSON.stringify(request),
+          body: JSON.stringify(requestActivity ? {...request, activity: requestActivity} : request),
         });
         if (result.ok !== true || typeof result.id !== 'string' || !result.id || typeof result.receivedAt !== 'string') throw new Error('Não foi possível confirmar o registro. Tente novamente.');
         completed = Object.freeze({id: result.id, receivedAt: result.receivedAt, mailStatus: result.mailStatus, demo: false});

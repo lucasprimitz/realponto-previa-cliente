@@ -1,5 +1,6 @@
 import {SYSTEMS, SCHEDULES, EMPLOYEES, CAMPAIGN, calculateCustomerQuote, paymentOptions, paymentDisplay, formatMoney, formatNumber} from './customer-model.mjs';
 import {PAYMENT_METHODS, buildCustomerRequest, formatPhone, formatTaxId} from './customer-request.mjs';
+import {activityChoice, browserActivityStore, createActivityTracker} from './activity.mjs';
 import {createRequestTransport} from './request-transport.mjs';
 
 const form = document.querySelector('#customer-form');
@@ -18,7 +19,12 @@ let transportError;
 const apiBase = document.querySelector('meta[name="realponto-api-base"]')?.content ?? '';
 const connected = apiBase.trim() !== '';
 try { transport = createRequestTransport({apiBase}); } catch (error) { transportError = error; }
+const activity = transport?.mode === 'connected' ? createActivityTracker({
+  update: browserActivityStore(new URL(apiBase, location.href).pathname),
+  send: snapshot => transport.recordActivity(snapshot),
+}) : undefined;
 if (connected) {
+  document.querySelector('#measurement-note').hidden = !activity;
   document.querySelector('#preview-ribbon').hidden = true;
   document.querySelector('#submission-note p').textContent = 'Ao solicitar a proposta, seus dados e suas escolhas serão encaminhados à equipe Realponto para dar continuidade ao atendimento.';
   document.querySelector('#success-kicker').textContent = 'SOLICITAÇÃO RECEBIDA';
@@ -93,6 +99,22 @@ function selections() {
     bankHours: selected('bankHours') === 'yes', workScale: selected('workScale') === 'yes',
   };
 }
+function recordActivity(choice, displayedTotalCents, visit = false, reviewing = false) {
+  if (!activity) return;
+  const estimateViewed = currentStep === 4 && displayedTotalCents !== undefined;
+  if (estimateViewed || reviewing) {
+    // Revisiting a completed form carries its choices into a new draft.
+    // For a displayed estimate use exactly the choices shown on that screen.
+    const configuration = {};
+    for (const name of ['system', 'schedules', 'employees', 'bankHours', 'workScale']) {
+      Object.assign(configuration, activityChoice(name, selected(name)).configuration);
+    }
+    const paymentMethod = selected('paymentMethod') || choice.paymentMethod;
+    activity.record({configuration, paymentMethod, step: currentStep, estimateViewed, displayedTotalCents, visit});
+  } else {
+    activity.record({...choice, step: currentStep, visit});
+  }
+}
 function setText(selector, value) { document.querySelector(selector).textContent = value; }
 function quantityLabel(value, upper) {
   return value === 'consultar' ? `Mais de ${formatNumber(upper)}` : value ? `Até ${formatNumber(Number(value))}` : 'A selecionar';
@@ -139,7 +161,7 @@ function renderSummary() {
     setText('#card-price', 'Em 10 parcelas');
     setText('#pix-saving', 'Desconto calculado na proposta');
     setText('#payment-method-help', 'Informe sua preferência. Os valores e as condições serão confirmados na proposta.');
-    return;
+    return null;
   }
   setText('#original-price', formatMoney(quote.totalBeforeDiscountCents));
   setText('#final-price', formatMoney(quote.cents));
@@ -155,6 +177,7 @@ function renderSummary() {
   setText('#boleto-price', `6x de ${formatMoney(installments.boletoInstallmentCents)}`);
   setText('#card-price', `10x de ${formatMoney(installments.cardInstallmentCents)}`);
   setText('#payment-method-help', 'Parcelas com valores aproximados por arredondamento. As condições serão confirmadas na proposta.');
+  return quote.cents;
 }
 function clearError() {
   errorBox.hidden = true;
@@ -243,6 +266,8 @@ function renderSteps() {
 }
 function showStep(step, focus = true) {
   if (submitting) return;
+  const reviewing = !success.hidden;
+  if (reviewing) activity?.review();
   currentStep = step;
   furthestStep = Math.max(furthestStep, step);
   clearError();
@@ -257,7 +282,8 @@ function showStep(step, focus = true) {
   document.querySelector('.wizard-actions').classList.toggle('has-back', step > 1);
   next.firstChild.textContent = step === 4 ? 'Solicitar proposta ' : 'Continuar ';
   setText('#step-footnote', step === 4 ? (connected ? 'Seus dados serão enviados à equipe Realponto.' : 'Envio demonstrativo nesta prévia.') : 'Você pode revisar suas escolhas antes de enviar.');
-  renderSummary();
+  const displayedTotalCents = renderSummary();
+  recordActivity({}, displayedTotalCents, !focus, reviewing);
   if (focus) {
     document.querySelector(`#step-${step}-title`).focus({preventScroll: true});
     document.querySelector('.wizard-top').scrollIntoView({block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
@@ -287,7 +313,8 @@ form.addEventListener('submit', async event => {
     });
     if (transportError) throw transportError;
     setSubmitting(true);
-    const receipt = await transport.submit(request);
+    const receipt = await transport.submit(request, await activity?.link());
+    if (!receipt.demo) activity?.complete();
     renderRequestPreview(request, receipt);
   } catch (error) {
     fail(error.message || 'Confira os dados da solicitação.', form.querySelector(`[name="${CSS.escape(error.field || '')}"]`));
@@ -302,7 +329,16 @@ form.addEventListener('submit', async event => {
   // O modo conectado só chega aqui após a confirmação do registro pelo servidor.
   document.querySelector('#success-title').focus();
 });
-form.addEventListener('change', () => { clearError(); renderSummary(); renderSteps(); });
+form.addEventListener('change', event => {
+  clearError();
+  renderSteps();
+  const name = event.target.name;
+  // Read values only for quote choices. Contact fields and consent never reach activity.
+  if (['system', 'schedules', 'employees', 'bankHours', 'workScale', 'paymentMethod'].includes(name)) {
+    const displayedTotalCents = renderSummary();
+    if (activity) recordActivity(activityChoice(name, selected(name)), displayedTotalCents);
+  }
+});
 form.addEventListener('input', renderSteps);
 steps.forEach((item, index) => item.querySelector('button').addEventListener('click', () => {
   const targetStep = index + 1;

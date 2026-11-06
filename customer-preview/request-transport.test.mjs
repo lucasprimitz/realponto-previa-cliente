@@ -112,3 +112,49 @@ test('recusa envio em HTTP remoto, permitindo HTTP apenas no desenvolvimento loc
   assert.throws(() => createRequestTransport({apiBase: './api/', pageUrl: 'http://192.168.90.7:8082/'}), /configurado corretamente/);
   assert.equal(createRequestTransport({apiBase: './api/', pageUrl: 'http://127.0.0.1:8937/'}).mode, 'connected');
 });
+
+test('atividade usa sessão e CSRF da mesma origem e mantém dados pessoais fora do corpo', async () => {
+  const calls = [];
+  const snapshot = {browserId: 'browser', simulationId: 'draft', step: 1, revision: 1, estimateViewed: false, configuration: {}, paymentMethod: null};
+  const transport = setup(async (url, options) => {
+    calls.push({url, options});
+    return url.endsWith('session.php') ? session() : json({ok: true});
+  });
+  await transport.recordActivity(snapshot);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].url, 'https://jornada.example.test/api/activity.php');
+  assert.equal(calls[1].options.credentials, 'same-origin');
+  assert.equal(calls[1].options.headers['X-CSRF-Token'], 'test-csrf-token');
+  assert.deepEqual(JSON.parse(calls[1].options.body), snapshot);
+});
+
+test('vínculo original é preservado em repetição depois de resposta perdida', async () => {
+  const posts = [];
+  const transport = setup(async (url, options) => {
+    if (url.endsWith('session.php')) return session();
+    posts.push({data: JSON.parse(options.body), key: options.headers['Idempotency-Key']});
+    if (posts.length === 1) throw new TypeError('Resposta perdida');
+    return receipt();
+  });
+  const activity = {browserId: 'browser', simulationId: 'draft'};
+  await assert.rejects(transport.submit(request(), activity), /Não foi possível/);
+  await transport.submit(request(), undefined);
+  assert.deepEqual(posts[0], posts[1]);
+  assert.deepEqual(posts[1].data.activity, activity);
+});
+
+test('novo rascunho pode enviar a mesma proposta e recebe protocolo próprio', async () => {
+  const posts = [];
+  let key = 0;
+  const transport = createRequestTransport({apiBase: './api/', pageUrl, randomId: () => 'key-' + ++key, fetchImpl: async (url, options) => {
+    if (url.endsWith('session.php')) return session();
+    posts.push(JSON.parse(options.body).activity.simulationId);
+    return json({ok:true, id:'req-' + key, receivedAt:'2026-10-28T12:00:01Z'});
+  }});
+  const a = {browserId:'browser', simulationId:'draft-a'};
+  const b = {browserId:'browser', simulationId:'draft-b'};
+  assert.equal((await transport.submit(request(), a)).id, 'req-1');
+  assert.equal((await transport.submit(request(), a)).id, 'req-1');
+  assert.equal((await transport.submit(request(), b)).id, 'req-2');
+  assert.deepEqual(posts, ['draft-a','draft-b']);
+});

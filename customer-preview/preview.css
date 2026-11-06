@@ -82,6 +82,7 @@ h1 em{font-style:normal;color:var(--blue)}
 .section-kicker{font-size:12px;letter-spacing:.065em;font-weight:650;color:#78698b;display:block;margin-bottom:11px}
 .wizard-step h2,.success-panel h2{font-size:27px;letter-spacing:-.6px;line-height:1.3;margin:0;color:var(--ink)}
 .wizard-step h2:focus,.success-panel h2:focus{outline:none}
+.measurement-note{color:var(--muted);font-size:14px;line-height:1.5;margin:0 0 22px;max-width:650px}
 .step-description{font-size:16px;color:var(--muted);line-height:1.6;margin:12px 0 26px;max-width:650px}
 fieldset{min-width:0;border:0;margin:0;padding:0}
 .system-options{display:grid;grid-template-columns:1fr 1fr;gap:16px}

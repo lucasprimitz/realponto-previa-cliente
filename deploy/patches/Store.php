@@ -4,6 +4,7 @@ namespace Realponto;
 
 final class Store {
     public readonly \PDO $db;
+    public readonly Activity $activity;
     public function __construct(private readonly Config $config) {
         $this->db = new \PDO('sqlite:' . rtrim($config->get('dataDirectory'), '/\\') . '/contacts.sqlite', null, null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC]);
         $this->db->exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
@@ -19,6 +20,7 @@ final class Store {
                 $this->db->exec('COMMIT');
             } catch (\Throwable $error) { $this->db->exec('ROLLBACK'); throw $error; }
         }
+        $this->activity = new Activity($this->db, $config->key);
         @chmod(rtrim($config->get('dataDirectory'), '/\\') . '/contacts.sqlite', 0600);
     }
     public function encrypt(string $plain): string {
@@ -51,18 +53,35 @@ final class Store {
         } catch (\Throwable $error) { $this->db->exec('ROLLBACK'); throw $error; }
         if ($count > $maximum) throw new Problem(429, 'Muitas tentativas. Aguarde alguns minutos e tente novamente.');
     }
-    public function create(array $request, string $idempotencyKey): array {
-        if (!preg_match('/^[a-zA-Z0-9_-]{20,80}$/D', str_replace('-', '_', $idempotencyKey))) throw new Problem(422, 'Identificador de envio inválido.');
+    public function create(array $request, string $idempotencyKey, ?array $activityIdentity = null): array {
+        if (!preg_match('/^[a-zA-Z0-9_-]{20,80}$/D', $idempotencyKey)) throw new Problem(422, 'Identificador de envio inválido.');
         $keyHash = hash_hmac('sha256', $idempotencyKey, $this->config->key);
-        // Sem timestamp, estimativa ou rótulos: uma repetição mantém o primeiro registro.
         $inputHash = hash_hmac('sha256', json_encode([$request['contact'], $request['configuration'], $request['payment']['method'], $request['consent']], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE), $this->config->key);
-        $id = 'RP-' . strtoupper(bin2hex(random_bytes(12)));
-        $status = $this->config->mailConfigured() ? 'pending' : 'disabled';
-        $statement = $this->db->prepare('INSERT INTO requests(id,key_hash,input_hash,payload,note,received_at,mail_status) VALUES (?,?,?,?,?,?,?) ON CONFLICT(key_hash) DO NOTHING');
-        $statement->execute([$id, $keyHash, $inputHash, $this->encrypt(json_encode($request, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)), $this->encrypt(''), $request['createdAt'], $status]);
-        $created = $statement->rowCount() > 0;
-        $find = $this->db->prepare('SELECT id,received_at,mail_status,input_hash FROM requests WHERE key_hash=?'); $find->execute([$keyHash]); $row = $find->fetch();
-        if (!$row || !hash_equals($row['input_hash'], $inputHash)) throw new Problem(409, 'Esse envio já foi utilizado com outros dados. Atualize a página para uma nova solicitação.');
+        $this->db->exec('BEGIN IMMEDIATE');
+        try {
+            $find = $this->db->prepare('SELECT id,received_at,mail_status,input_hash FROM requests WHERE key_hash=?');
+            $find->execute([$keyHash]);
+            $row = $find->fetch();
+            $find->closeCursor();
+            if (!$row && $activityIdentity !== null) $row = $this->activity->linkedRequest($activityIdentity);
+            $created = !$row;
+            if ($created) {
+                $row = [
+                    'id' => 'RP-' . strtoupper(bin2hex(random_bytes(12))), 'received_at' => $request['createdAt'],
+                    'mail_status' => $this->config->mailConfigured() ? 'pending' : 'disabled',
+                ];
+                $insert = $this->db->prepare('INSERT INTO requests(id,key_hash,input_hash,payload,note,received_at,mail_status) VALUES (?,?,?,?,?,?,?)');
+                $insert->execute([$row['id'], $keyHash, $inputHash, $this->encrypt(json_encode($request, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)),
+                    $this->encrypt(''), $row['received_at'], $row['mail_status']]);
+                if ($activityIdentity !== null) $this->activity->link($activityIdentity, $row['id'], $request);
+            } elseif (!hash_equals($row['input_hash'], $inputHash)) {
+                throw new Problem(409, 'Esse envio já foi utilizado com outros dados. Inicie uma nova simulação.');
+            }
+            $this->db->exec('COMMIT');
+        } catch (\Throwable $error) {
+            $this->db->exec('ROLLBACK');
+            throw $error;
+        }
         return ['ok' => true, 'id' => $row['id'], 'receivedAt' => $row['received_at'], 'mailStatus' => $row['mail_status'], 'created' => $created];
     }
     public function item(array $row): array {

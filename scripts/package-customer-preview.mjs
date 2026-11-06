@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 const project = fileURLToPath(new URL('../', import.meta.url));
 export const PUBLIC_FILES = Object.freeze([
   'index.html', 'preview.css', 'app.mjs', 'customer-model.mjs',
-  'customer-request.mjs', 'request-transport.mjs', 'quote.mjs', 'assets/realponto-30-anos.png',
+  'customer-request.mjs', 'request-transport.mjs', 'activity.mjs', 'quote.mjs', 'assets/realponto-30-anos.png',
   'assets/lgRP.png',
 ]);
 const sha256 = content => createHash('sha256').update(content).digest('hex');

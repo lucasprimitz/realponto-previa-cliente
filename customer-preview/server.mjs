@@ -12,6 +12,7 @@ const routes = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/preview.css', ['preview.css', 'text/css; charset=utf-8']],
+  ['/activity.mjs', ['activity.mjs', 'text/javascript; charset=utf-8']],
   ['/app.mjs', ['app.mjs', 'text/javascript; charset=utf-8']],
   ['/customer-model.mjs', ['customer-model.mjs', 'text/javascript; charset=utf-8']],
   ['/customer-request.mjs', ['customer-request.mjs', 'text/javascript; charset=utf-8']],

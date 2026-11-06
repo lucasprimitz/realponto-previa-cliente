@@ -39,6 +39,7 @@
       <div class="page-heading"><div><span class="eyebrow">ATENDIMENTO REALPONTO</span><h1 id="page-title" tabindex="-1">Solicitações recebidas</h1><p>Organize os contatos, confira o investimento e encaminhe cada solicitação.</p></div><div class="count-badge"><strong id="request-count">0</strong><span>solicitações nesta lista</span></div></div>
       <nav class="workspace-tabs" aria-label="Áreas do atendimento" role="tablist">
         <button id="requests-tab" class="workspace-tab" type="button" role="tab" aria-selected="true" aria-controls="requests-view">Solicitações</button>
+        <button id="activity-tab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="activity-view" tabindex="-1">Atividade do simulador</button>
         <button id="reports-tab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="reports-view" tabindex="-1">Relatórios mensais</button>
       </nav>
       <div id="delivery-notice" class="notice" hidden></div>
@@ -50,6 +51,27 @@
       <div id="empty-list" class="empty-card" hidden><div class="lock-icon" aria-hidden="true">✓</div><h2>Nenhuma solicitação por aqui.</h2><p>Os novos contatos aparecerão nesta área após o envio pelo formulário.</p></div>
       <nav id="pagination" class="pagination" aria-label="Páginas de solicitações" hidden><button id="previous-page" class="button secondary" type="button">← Anterior</button><span id="page-indicator"></span><button id="next-page" class="button secondary" type="button">Próxima →</button></nav>
       </div>
+      <section id="activity-view" role="tabpanel" aria-labelledby="activity-tab" hidden>
+        <div class="toolbar activity-toolbar">
+          <div class="filter-field">
+            <label for="activity-month">Mês da atividade</label>
+            <select id="activity-month" disabled></select>
+          </div>
+          <button id="refresh-activity" class="button secondary" type="button">Atualizar atividade</button>
+        </div>
+        <div id="activity-metrics" class="report-metrics activity-metrics" aria-label="Resumo do mês"></div>
+        <h2 class="activity-list-title">Movimentações do mês</h2>
+        <p id="activity-status" class="hint" role="status" aria-live="polite"></p>
+        <ul id="activity-list" class="activity-list" aria-label="Últimas movimentações"></ul>
+        <div id="activity-empty" class="empty-card" hidden>
+          <h2>Nenhuma atividade registrada neste mês.</h2>
+        </div>
+        <nav id="activity-pagination" class="pagination" aria-label="Páginas de atividade" hidden>
+          <button id="activity-previous" class="button secondary" type="button">← Anterior</button>
+          <span id="activity-page"></span>
+          <button id="activity-next" class="button secondary" type="button">Próxima →</button>
+        </nav>
+      </section>
       <section id="reports-view" role="tabpanel" aria-labelledby="reports-tab" hidden>
         <div class="toolbar report-toolbar"><div><h2>Movimento das solicitações</h2><p class="hint">Acompanhe os contatos recebidos e o investimento estimado em cada mês.</p></div><div class="report-filters"><div class="filter-field"><label for="report-year">Ano</label><input id="report-year" type="number" inputmode="numeric" min="2000" max="2100" step="1"></div><button id="refresh-reports" class="button secondary" type="button">Atualizar relatório</button></div></div>
         <p id="report-status" class="hint" role="status" aria-live="polite"></p>

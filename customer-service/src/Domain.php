@@ -37,23 +37,40 @@ final class Domain {
                 $taxId = $normalizedTaxId !== '' ? $normalizedTaxId : $taxId;
             }
         }
-        $system = null;
-        foreach ($this->catalog['systems'] as $candidate) if (($configuration['system'] ?? null) === $candidate['id']) $system = $candidate;
-        if (!$system) throw new Problem(422, 'Selecione um sistema válido.');
-        foreach (['schedules', 'employees'] as $key) {
-            $value = $configuration[$key] ?? null;
-            if ($value !== 'consultar' && (!is_int($value) || !in_array($value, $this->catalog[$key], true))) throw new Problem(422, 'Selecione um pacote válido de horários e funcionários.');
-        }
-        foreach (['bankHours', 'workScale'] as $key) if (!isset($configuration[$key]) || !is_bool($configuration[$key])) throw new Problem(422, 'Informe as opções de banco de horas e escala.');
+        $clean = $this->configuration($configuration);
         $method = $payment['method'] ?? null;
         if (!is_string($method) || !isset(self::PAYMENTS[$method])) throw new Problem(422, 'Selecione uma forma de pagamento válida.');
-        $clean = ['system' => $system['id'], 'schedules' => $configuration['schedules'], 'employees' => $configuration['employees'], 'bankHours' => $configuration['bankHours'], 'workScale' => $configuration['workScale']];
         return [
             'schemaVersion' => 1, 'createdAt' => $now->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z'),
             'contact' => ['name' => self::text($contact['name'] ?? null, 'nome', 2, 120), 'company' => self::text($contact['company'] ?? null, 'empresa', 2, 180), 'email' => $email, 'phone' => $phone, 'taxId' => $taxId],
             'configuration' => $clean, 'payment' => ['method' => $method, 'label' => self::PAYMENTS[$method]],
-            'estimate' => $this->quote($clean, (bool)$system['secullum'], $now), 'consent' => true,
+            'estimate' => $this->configurationEstimate($clean, $now), 'consent' => true,
         ];
+    }
+    /** Only the simulator's fixed options are accepted here, including false answers. */
+    public function configuration(array $input, bool $partial = false): array {
+        $keys = ['system', 'schedules', 'employees', 'bankHours', 'workScale'];
+        if ($partial && array_diff(array_keys($input), $keys)) throw new Problem(422, 'Opção de simulação inválida.');
+        $clean = [];
+        foreach ($keys as $key) {
+            $value = $input[$key] ?? null;
+            if ($value === null && $partial) {
+                $clean[$key] = null;
+                continue;
+            }
+            $valid = match ($key) {
+                'system' => in_array($value, array_column($this->catalog['systems'], 'id'), true),
+                'schedules', 'employees' => $value === 'consultar' || (is_int($value) && in_array($value, $this->catalog[$key], true)),
+                default => is_bool($value),
+            };
+            if (!$valid) throw new Problem(422, 'Confira as opções selecionadas para a configuração.');
+            $clean[$key] = $value;
+        }
+        return $clean;
+    }
+    public function configurationEstimate(array $configuration, \DateTimeImmutable $now): array {
+        $systems = array_column($this->catalog['systems'], 'secullum', 'id');
+        return $this->quote($configuration, (bool)$systems[$configuration['system']], $now);
     }
     private static function percent(int $cents, int $percent): int { return intdiv($cents * $percent + 50, 100); }
     private function quote(array $configuration, bool $secullum, \DateTimeImmutable $now): array {

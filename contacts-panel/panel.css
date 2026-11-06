@@ -88,3 +88,121 @@
 .request-title-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:10px 16px}
 .request-heading .request-id{max-width:240px;margin:3px 0 0;font-size:11px;line-height:1.6;color:var(--muted);text-align:right}
 @media(max-width:600px){.request-title-row{grid-template-columns:minmax(0,1fr);gap:4px}.request-heading .request-id{max-width:100%;margin:0;text-align:left}}
+
+/* Atividade do simulador */
+.activity-toolbar { flex-wrap: wrap; }
+.activity-toolbar .filter-field { flex: 1 1 155px; min-width: 0; max-width: 240px; }
+.activity-list-title { color: var(--deep); margin: 28px 0 8px; }
+.activity-list {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 24px;
+  padding: 0;
+  list-style: none;
+}
+.activity-card {
+  min-width: 0;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.activity-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, .85fr) 12px;
+  grid-template-areas: "heading step status arrow";
+  align-items: center;
+  gap: 10px 20px;
+  padding: 14px 18px;
+  border-radius: 11px;
+  list-style: none;
+}
+summary.activity-summary { cursor: pointer; }
+.activity-summary::-webkit-details-marker { display: none; }
+summary.activity-summary:hover, .activity-card details[open] > summary { background: #f7f7fc; }
+.activity-summary:focus-visible { outline-offset: -3px; }
+.activity-summary-heading { grid-area: heading; display: grid; gap: 3px; min-width: 0; }
+.activity-summary-heading strong { color: var(--deep); font-size: 16px; }
+.activity-card-time { margin: 0; color: var(--muted); font-size: 12px; }
+.activity-stage { grid-area: step; color: var(--deep); font-size: 14px; font-weight: 600; }
+.activity-status-group {
+  grid-area: status;
+  justify-self: end;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  text-align: center;
+}
+.activity-empty-choices { font-size: 12px; color: var(--muted); }
+.activity-status-pill {
+  text-align: center;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 100px;
+  background: var(--lavender);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 650;
+}
+.activity-status-pill.unfinished { background: #fff0d8; color: #7a4308; }
+.activity-status-pill.submitted { background: #e7f5ec; color: #235b39; }
+.activity-chevron {
+  grid-area: arrow;
+  justify-self: center;
+  display: grid;
+  place-items: center;
+  width: 12px;
+  height: 14px;
+}
+.activity-chevron::before {
+  content: '';
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid var(--blue);
+  border-bottom: 2px solid var(--blue);
+  transform: translateY(-2px) rotate(45deg);
+}
+.activity-card details[open] > summary { border-radius: 11px 11px 0 0; }
+.activity-card details[open] .activity-chevron::before { transform: translateY(2px) rotate(225deg); }
+.activity-body { display: grid; gap: 14px; padding: 16px 18px; border-top: 1px solid var(--border); }
+.activity-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 115px), 1fr));
+  gap: 10px 16px;
+  margin: 0;
+}
+.activity-details dt { color: var(--muted); font-size: 12px; }
+.activity-details dd { margin: 3px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+.activity-outcome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 5px 14px;
+  padding: 10px 13px;
+  margin: 0;
+  border-radius: 10px;
+  background: var(--lavender);
+  color: var(--deep);
+  font-size: 13px;
+}
+.activity-outcome strong { font-size: 18px; }
+.activity-protocol { margin: 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .activity-summary {
+    grid-template-columns: minmax(0, 1fr) fit-content(34%) 12px;
+    grid-template-areas: "heading status arrow" "step status arrow";
+    gap: 8px 12px;
+    padding: 12px 14px;
+  }
+  .activity-body { padding: 14px; }
+}
+@media (max-width: 600px) {
+  .activity-toolbar { gap: 10px; padding: 12px; }
+  .activity-toolbar .filter-field { flex-basis: 125px; }
+  .activity-toolbar .button { padding: 10px; font-size: 13px; }
+  .workspace-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .workspace-tab { padding: 10px 4px; line-height: 1.35; font-size: 13px; }
+}

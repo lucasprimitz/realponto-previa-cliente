@@ -14,6 +14,15 @@ const refreshButton = $('#refresh');
 const previousButton = $('#previous-page');
 const nextButton = $('#next-page');
 const state = {authenticated: false, csrfToken: '', page: 1, totalPages: 1, busy: false, generation: 0, lastActivity: 0, view: 'requests'};
+const activityPagination = {page: 1, totalPages: 1};
+const activityMonth = $('#activity-month');
+const monthFormat = new Intl.DateTimeFormat('pt-BR', {year: 'numeric', month: 'long', timeZone: 'UTC'});
+const views = {
+  requests: ['Solicitações recebidas', 'Organize os contatos, confira o investimento e encaminhe cada solicitação.'],
+  activity: ['Atividade do simulador', 'Acompanhe as simulações de cada mês e veja quais geraram uma solicitação.'],
+  reports: ['Relatórios mensais', 'Veja o movimento dos contatos e os valores estimados ao longo do ano.'],
+};
+const viewNames = Object.keys(views);
 const idleMilliseconds = 15 * 60 * 1000;
 let idleTimer;
 let apiBase;
@@ -36,9 +45,15 @@ function controlsBusy(busy) {
   loginButton.disabled = busy;
   refreshButton.disabled = busy;
   filter.disabled = busy;
+  $('#refresh-activity').disabled = busy;
+  activityMonth.disabled = busy || !activityMonth.options.length;
+  $('#activity-previous').disabled = busy || activityPagination.page <= 1;
+  $('#activity-next').disabled = busy || activityPagination.page >= activityPagination.totalPages;
   $('#refresh-reports').disabled = busy;
   $('#report-year').disabled = busy;
-  for (const tab of document.querySelectorAll('.workspace-tab')) tab.disabled = busy;
+  for (const tab of document.querySelectorAll('.workspace-tab')) {
+    tab.setAttribute('aria-disabled', String(busy));
+  }
   previousButton.disabled = busy || state.page <= 1;
   nextButton.disabled = busy || state.page >= state.totalPages;
   workspace.setAttribute('aria-busy', String(busy));
@@ -51,6 +66,8 @@ function clearPrivateView() {
   filter.value = 'all';
   clearTimeout(idleTimer);
   list.replaceChildren();
+  activityMonth.replaceChildren();
+  clearSimulationActivity();
   $('#report-metrics').replaceChildren();
   $('#report-rows').replaceChildren();
   $('#report-total').replaceChildren();
@@ -408,22 +425,178 @@ $('#confirm-archive').addEventListener('click', async () => {
 });
 function setView(view) {
   state.view = view;
-  const reports = view === 'reports';
-  $('#requests-view').hidden = reports;
-  $('#reports-view').hidden = !reports;
-  for (const name of ['requests', 'reports']) {
+  for (const name of viewNames) {
+    const selected = name === view;
     const tab = $('#' + name + '-tab');
-    tab.setAttribute('aria-selected', String(name === view));
-    tab.tabIndex = name === view ? 0 : -1;
+    $('#' + name + '-view').hidden = !selected;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
   }
-  $('#page-title').textContent = reports ? 'Relatórios mensais' : 'Solicitações recebidas';
-  document.querySelector('.page-heading > div > p').textContent = reports ? 'Veja o movimento dos contatos e os valores estimados ao longo do ano.' : 'Organize os contatos, confira o investimento e encaminhe cada solicitação.';
-  document.querySelector('.count-badge').hidden = reports;
+  const [title, description] = views[view];
+  $('#page-title').textContent = title;
+  document.querySelector('.page-heading > div > p').textContent = description;
+  document.querySelector('.count-badge').hidden = view !== 'requests';
+  const delivery = $('#delivery-notice');
+  delivery.hidden = view === 'activity' || !delivery.textContent;
 }
 async function loadActiveView(reset = false) {
   if (state.view === 'reports') return loadReports();
+  if (state.view === 'activity') return loadSimulationActivity(reset ? 1 : activityPagination.page);
   return loadRequests(reset ? 1 : state.page);
 }
+function clearSimulationActivity() {
+  activityPagination.page = 1;
+  activityPagination.totalPages = 1;
+  $('#activity-status').textContent = '';
+  $('#activity-page').textContent = '';
+  $('#activity-empty').hidden = true;
+  $('#activity-pagination').hidden = true;
+  $('#activity-list').replaceChildren();
+  $('#activity-metrics').replaceChildren();
+}
+
+const activitySteps = ['Seu sistema', 'Quantidades', 'Rotina de ponto', 'Sua proposta'];
+
+function activityChoices(configuration, paymentMethod) {
+  const details = textElement('dl', 'activity-details', '');
+  if (configuration.system) addDetail(details, 'Sistema', systemLabel(configuration.system));
+  if (configuration.schedules != null) addDetail(details, 'Horários', quantity(configuration.schedules, 100));
+  if (configuration.employees != null) addDetail(details, 'Funcionários', quantity(configuration.employees, 1000));
+  if (typeof configuration.bankHours === 'boolean') addDetail(details, 'Banco de horas', configuration.bankHours ? 'Sim' : 'Não');
+  if (typeof configuration.workScale === 'boolean') addDetail(details, 'Escalas', configuration.workScale ? 'Sim' : 'Não');
+  if (paymentMethod) {
+    const label = selectedPayment({payment: {method: paymentMethod}}).label;
+    addDetail(details, 'Pagamento', label);
+  }
+  return details;
+}
+
+function renderSimulation(item) {
+  const row = textElement('li', 'activity-card', '');
+  const configuration = item.configuration || {};
+  const choices = activityChoices(configuration, item.paymentMethod);
+  const hasChoices = choices.childElementCount > 0;
+  const summary = textElement(hasChoices ? 'summary' : 'div', 'activity-summary', '');
+  const heading = textElement('span', 'activity-summary-heading', '');
+  const title = configuration.system ? systemLabel(configuration.system) : 'Visita ao simulador';
+  heading.append(textElement('strong', '', title), textElement('span', 'activity-card-time', 'Última atividade · ' + receivedDate(item.lastActivityAt)));
+
+  const step = 'Etapa ' + item.maxStep + ' de 4 · ' + activitySteps[item.maxStep - 1];
+  const status = textElement('span', 'activity-status-pill', item.started ? 'Preenchimento iniciado' : 'Página visitada');
+  if (item.requestId) {
+    status.textContent = 'Solicitação enviada';
+    status.classList.add('submitted');
+  } else if (item.maxStep === 4) {
+    status.textContent = 'Não finalizado';
+    status.classList.add('unfinished');
+  }
+  const stage = textElement('span', 'activity-stage', step);
+  const statusGroup = textElement('span', 'activity-status-group', '');
+  statusGroup.append(status);
+  if (!hasChoices) statusGroup.append(textElement('span', 'activity-empty-choices', 'Nenhuma escolha registrada.'));
+  summary.append(heading, stage, statusGroup);
+
+  const body = textElement('div', 'activity-body', '');
+  if (item.step && item.step !== item.maxStep) {
+    body.append(textElement('p', 'activity-card-time', 'Última tela visitada · ' + activitySteps[item.step - 1]));
+  }
+  if (hasChoices) body.append(choices);
+  if (item.estimateViewed && item.estimate) {
+    const quote = textElement('p', 'activity-outcome', '');
+    quote.append(textElement('span', '', 'Última estimativa exibida'), textElement('strong', '', amount(item.estimate.totalCents)));
+    body.append(quote);
+    if (item.estimate.matchesCatalog === false) {
+      body.append(textElement('p', 'activity-card-time', 'O valor exibido no navegador difere da tabela vigente no registro.'));
+    }
+  }
+  if (item.requestId) {
+    body.append(textElement('p', 'activity-protocol', 'Protocolo da solicitação · ' + item.requestId));
+  }
+  if (hasChoices) {
+    const arrow = textElement('span', 'activity-chevron', '');
+    arrow.setAttribute('aria-hidden', 'true');
+    summary.append(arrow);
+    const card = document.createElement('details');
+    card.append(summary, body);
+    row.append(card);
+  } else {
+    row.append(summary);
+    if (body.childElementCount) row.append(body);
+  }
+  return row;
+}
+
+function showActivityMonths({firstMonth, currentMonth, month}) {
+  const validMonth = value => typeof value === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+  if (![firstMonth, currentMonth, month].every(validMonth) || month < firstMonth || month > currentMonth) {
+    throw new Error('Não foi possível identificar o mês da atividade.');
+  }
+  if (activityMonth.options[0]?.value !== currentMonth || activityMonth.options[activityMonth.length - 1]?.value !== firstMonth) {
+    const options = [];
+    const cursor = new Date(currentMonth + '-01T00:00:00Z');
+    const first = new Date(firstMonth + '-01T00:00:00Z');
+    while (cursor >= first) {
+      const value = cursor.toISOString().slice(0, 7);
+      options.push(new Option(monthFormat.format(cursor), value));
+      cursor.setUTCMonth(cursor.getUTCMonth() - 1);
+    }
+    activityMonth.replaceChildren(...options);
+  }
+  activityMonth.value = month;
+}
+
+function renderSimulationActivity(result) {
+  const stats = result.summary;
+  const metricNames = ['browsers', 'started', 'viewed', 'submitted'];
+  if (!Array.isArray(result.items) || !Number.isSafeInteger(result.total) || !stats ||
+      !metricNames.every(name => Number.isSafeInteger(stats[name]) && stats[name] >= 0)) {
+    throw new Error('Não foi possível conferir as atividades. Tente atualizar novamente.');
+  }
+  const number = value => value.toLocaleString('pt-BR');
+  showActivityMonths(result);
+  const items = result.items.map(renderSimulation);
+  $('#activity-metrics').replaceChildren(
+    reportMetric('Navegadores', number(stats.browsers), 'Navegadores distintos com visitas registradas.'),
+    reportMetric('Preenchimento iniciado', number(stats.started), 'Simulações com pelo menos uma escolha.'),
+    reportMetric('Orçamento visualizado', number(stats.viewed), 'Simulações que chegaram ao orçamento.'),
+    reportMetric('Solicitação enviada', number(stats.submitted), 'Simulações vinculadas a um protocolo.', true)
+  );
+  $('#activity-list').replaceChildren(...items);
+  $('#activity-empty').hidden = result.total !== 0;
+  activityPagination.page = result.page;
+  activityPagination.totalPages = Math.max(1, result.totalPages);
+  $('#activity-pagination').hidden = activityPagination.totalPages <= 1;
+  $('#activity-page').textContent = 'Página ' + result.page + ' de ' + activityPagination.totalPages;
+  $('#activity-status').textContent = result.total === 1 ? '1 simulação registrada.' : number(result.total) + ' simulações registradas.';
+}
+
+async function loadSimulationActivity(page) {
+  if (!state.authenticated || state.busy) return;
+  controlsBusy(true);
+  const month = activityMonth.value;
+  const monthQuery = month ? '&month=' + encodeURIComponent(month) : '';
+  $('#activity-status').textContent = 'Carregando atividade…';
+  const generation = ++state.generation;
+  try {
+    let result = await api('activity.php?page=' + page + monthQuery);
+    if (generation !== state.generation || !state.authenticated) return;
+    if (page > 1 && Number.isSafeInteger(result.totalPages) && result.totalPages < page) {
+      result = await api('activity.php?page=' + Math.max(1, result.totalPages) + monthQuery);
+      if (generation !== state.generation || !state.authenticated) return;
+    }
+    renderSimulationActivity(result);
+    notice();
+    recordActivity();
+  } catch (error) {
+    if (generation !== state.generation || expired(error)) return;
+    clearSimulationActivity();
+    $('#activity-status').textContent = 'Não foi possível carregar as atividades.';
+    notice(error.message, 'error');
+  } finally {
+    if (generation === state.generation) controlsBusy(false);
+  }
+}
+
 function validMetrics(row) {
   return row && ['count', 'pricedCount', 'consultationCount', 'totalCents', 'handledCount'].every(key => Number.isSafeInteger(row[key]) && row[key] >= 0);
 }
@@ -495,7 +668,7 @@ function applySession(data) {
   if (!data.mailConfigured) notices.push('O recebimento por e-mail ainda precisa ser configurado pela TI. As solicitações ficam registradas neste painel.');
   if (!data.submissionEnabled) notices.push('O recebimento de novas solicitações ainda não está ativado.');
   deliveryNotice.textContent = notices.join(' ');
-  deliveryNotice.hidden = !state.authenticated || !notices.length;
+  deliveryNotice.hidden = !state.authenticated || state.view === 'activity' || !notices.length;
   if (state.authenticated) recordActivity();
 }
 async function refreshSession(load = true) {
@@ -554,7 +727,7 @@ loginForm.addEventListener('submit', async event => {
   } finally { controlsBusy(false); loginButton.textContent = 'Entrar nas solicitações →'; }
 });
 $('#report-year').value = new Intl.DateTimeFormat('en', {year: 'numeric', timeZone: 'America/Sao_Paulo'}).format(new Date());
-for (const view of ['requests', 'reports']) {
+for (const view of viewNames) {
   const tab = $('#' + view + '-tab');
   tab.addEventListener('click', () => {
     if (state.busy || !state.authenticated || state.view === view) return;
@@ -563,10 +736,20 @@ for (const view of ['requests', 'reports']) {
   tab.addEventListener('keydown', event => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) || state.busy) return;
     event.preventDefault();
-    const next = event.key === 'Home' ? 'requests' : event.key === 'End' ? 'reports' : view === 'requests' ? 'reports' : 'requests';
-    $('#' + next + '-tab').click(); $('#' + next + '-tab').focus();
+    const index = viewNames.indexOf(view);
+    const offset = event.key === 'ArrowLeft' ? -1 : 1;
+    let next = viewNames[(index + offset + viewNames.length) % viewNames.length];
+    if (event.key === 'Home') next = viewNames[0];
+    if (event.key === 'End') next = viewNames[viewNames.length - 1];
+    const nextTab = $('#' + next + '-tab');
+    nextTab.focus();
+    nextTab.click();
   });
 }
+activityMonth.addEventListener('change', () => { clearSimulationActivity(); void loadSimulationActivity(1); });
+$('#refresh-activity').addEventListener('click', () => { void loadSimulationActivity(1); });
+$('#activity-previous').addEventListener('click', () => { if (activityPagination.page > 1) void loadSimulationActivity(activityPagination.page - 1); });
+$('#activity-next').addEventListener('click', () => { if (activityPagination.page < activityPagination.totalPages) void loadSimulationActivity(activityPagination.page + 1); });
 $('#refresh-reports').addEventListener('click', () => { void loadReports(); });
 $('#report-year').addEventListener('change', () => { void loadReports(); });
 $('#report-year').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); void loadReports(); } });

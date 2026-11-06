@@ -25,6 +25,10 @@ A página importa `../dist/quote.mjs`. Esse arquivo é uma cópia sincronizada d
 
 A prévia estática pede dados fictícios e não transmite nem guarda contatos. O pacote estático de aprovação e seu atualizador mantêm esse comportamento.
 
+Na versão funcional, a página registra a visita, as escolhas, a etapa atual e a exibição da estimativa ou da consulta personalizada na etapa 4. Abas e recargas do mesmo navegador compartilham o rascunho. Dados de contato só entram na solicitação enviada. Após 90 dias de inatividade no navegador, a próxima visita inicia novos identificadores. Se o navegador bloquear esse armazenamento, o formulário continua recebendo propostas.
+
+O painel Atividade do simulador preserva o histórico por mês desde o primeiro registro disponível, no fuso de São Paulo. O filtro abre no mês atual. Uma simulação que continua em outro mês aparece em cada mês em que houve movimentação, com as escolhas conhecidas até então.
+
 O pacote PHP, gerado por `scripts/package-customer-service.mjs`, ativa a integração da página com a API na mesma origem. O serviço valida os dados, recalcula a estimativa pela data do servidor e registra um protocolo. Os valores recebidos do navegador não são aceitos como autoridade. O painel `contatos/` exige senha validada pelo PHP e permite marcar encaminhamento, escrever uma observação de até 160 caracteres e filtrar os registros.
 
 A cópia por e-mail usa uma fila independente; falhas no e-mail não apagam a solicitação. Destinatário e SMTP podem ser definidos depois na configuração privada da TI. Não há cobrança ou aprovação automática de proposta.
