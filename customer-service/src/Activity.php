@@ -16,6 +16,8 @@ final class Activity {
         )");
         $db->exec('CREATE INDEX IF NOT EXISTS simulation_activity_seen ON simulation_activity(last_seen DESC, draft_key)');
         $this->initializeMonthlyHistory();
+        $this->initializeAccessContext();
+        $this->db->exec('CREATE INDEX IF NOT EXISTS requests_activity_received ON requests(received_at)');
     }
 
     /** Public identifiers are capabilities. Neither the raw IDs nor the hashes are listed in the panel. */
@@ -74,11 +76,47 @@ final class Activity {
         }
     }
 
-    // Called only after a state change and within the same transaction as the source record.
+    private function missingAccessColumns(): array {
+        $context = ['device' => "TEXT NOT NULL DEFAULT 'unknown'", 'region' => 'TEXT'];
+        $schemas = [
+            'simulation_activity' => $context,
+            'simulation_activity_months' => $context,
+        ];
+        $missing = [];
+        foreach ($schemas as $table => $required) {
+            $columns = $this->db->query("PRAGMA table_info($table)")->fetchAll(\PDO::FETCH_COLUMN, 1);
+            $absent = array_diff_key($required, array_flip($columns));
+            if ($absent) $missing[$table] = $absent;
+        }
+        return $missing;
+    }
+
+    private function initializeAccessContext(): void {
+        if (!$this->missingAccessColumns()) return;
+        $this->db->exec('BEGIN IMMEDIATE');
+        try {
+            // Recheck under the write lock when two requests initialize the same database.
+            $missing = $this->missingAccessColumns();
+            foreach ($missing as $table => $columns) {
+                foreach ($columns as $name => $definition) {
+                    $this->db->exec("ALTER TABLE $table ADD COLUMN $name $definition");
+                }
+            }
+            $this->db->exec('COMMIT');
+        } catch (\Throwable $error) {
+            $this->db->exec('ROLLBACK');
+            throw $error;
+        }
+    }
+
     private function saveMonth(string $draft, string $lastSeen): void {
-        $columns = self::SNAPSHOT_COLUMNS;
-        $save = $this->db->prepare("INSERT OR REPLACE INTO simulation_activity_months (month,$columns)
-            SELECT ?, $columns FROM simulation_activity WHERE draft_key=?");
+        $columns = self::SNAPSHOT_COLUMNS . ',device,region';
+        $save = $this->db->prepare("INSERT INTO simulation_activity_months (month,$columns)
+            SELECT ?, $columns FROM simulation_activity WHERE draft_key=?
+            ON CONFLICT(month,draft_key) DO UPDATE SET
+                last_seen=excluded.last_seen, step=excluded.step, max_step=excluded.max_step, started=excluded.started,
+                choices=excluded.choices, payment=excluded.payment, quote=excluded.quote, request_id=excluded.request_id,
+                device=excluded.device, region=excluded.region");
         $save->execute([self::localTime($lastSeen)->format('Y-m'), $draft]);
     }
 
@@ -104,7 +142,7 @@ final class Activity {
             'matchesCatalog' => $shown === $calculated['totalCents']], JSON_THROW_ON_ERROR);
     }
 
-    public function record(array $input, Domain $domain): array {
+    public function record(array $input, Domain $domain, array $access = []): array {
         $allowed = ['browserId','simulationId','revision','step','estimateViewed','configuration','paymentMethod','displayedTotalCents'];
         $identity = $this->identity($input);
         $revision = $input['revision'] ?? null;
@@ -141,11 +179,14 @@ final class Activity {
                     $saved = json_decode($row['choices'], true, 16, JSON_THROW_ON_ERROR);
                     if ($fresh) $saved = array_replace($saved, array_intersect_key($choices, $configuration));
                     $quote = $newQuote ? $visibleQuote : $row['quote'];
+                    // Reordered events can add a missed milestone, but cannot replace the newest access context.
+                    $device = $access['device'] ?? 'unknown';
                     $update = $this->db->prepare('UPDATE simulation_activity SET revision=?,step=?,max_step=?,started=?,
-                        choices=?,payment=?,quote=?,quote_revision=?,last_seen=? WHERE draft_key=?');
+                        choices=?,payment=?,quote=?,quote_revision=?,last_seen=?,device=?,region=? WHERE draft_key=?');
                     $update->execute([max($revision, (int)$row['revision']), $fresh ? $step : $row['step'], $nextStep, (int)$started,
                         json_encode($saved, JSON_THROW_ON_ERROR), $fresh && array_key_exists('paymentMethod', $input) ? $payment : $row['payment'],
-                        $quote, $newQuote ? $revision : $row['quote_revision'], $now, $identity['draft']]);
+                        $quote, $newQuote ? $revision : $row['quote_revision'], $now,
+                        $fresh ? $device : $row['device'], $fresh ? ($access['region'] ?? null) : $row['region'], $identity['draft']]);
                     $this->saveMonth($identity['draft'], $now);
                 }
             }
@@ -164,15 +205,29 @@ final class Activity {
         $find->execute([$identity['draft']]);
         return $find->fetch() ?: null;
     }
-    public function link(array $identity, string $requestId, array $request): void {
+    public function link(array $identity, string $requestId, array $request, array $access = []): void {
         $row = $this->openRow($identity, $request['createdAt']);
         if ($row['request_id'] === $requestId) return;
         if ($row['request_id'] !== null) throw new Problem(409, 'Esta simulação já foi enviada. Inicie uma nova simulação.');
+        $device = $access['device'] ?? 'unknown';
         $update = $this->db->prepare('UPDATE simulation_activity SET request_id=?, step=4,max_step=4,started=1,
-            choices=?,payment=?,last_seen=? WHERE draft_key=? AND request_id IS NULL');
+            choices=?,payment=?,last_seen=?,device=?,region=? WHERE draft_key=? AND request_id IS NULL');
         $update->execute([$requestId, json_encode($request['configuration'], JSON_THROW_ON_ERROR),
-            $request['payment']['method'], $request['createdAt'], $identity['draft']]);
+            $request['payment']['method'], $request['createdAt'], $device, $access['region'] ?? null, $identity['draft']]);
         $this->saveMonth($identity['draft'], $request['createdAt']);
+    }
+
+    private function visitorsByDevice(string $month): array {
+        // Choose one snapshot per browser before filtering: a reassessment cannot count a browser twice.
+        $query = $this->db->prepare("SELECT device, COUNT(*) AS total FROM (
+                SELECT device, ROW_NUMBER() OVER (
+                    PARTITION BY browser_key ORDER BY last_seen DESC, rowid DESC
+                ) AS visit_rank FROM simulation_activity_months WHERE month=?
+            ) WHERE visit_rank=1 AND device IN ('mobile','desktop') GROUP BY device");
+        $query->execute([$month]);
+        $counts = ['mobile' => 0, 'desktop' => 0];
+        foreach ($query as $row) $counts[$row['device']] = (int)$row['total'];
+        return $counts;
     }
 
     public function listing(int $page, mixed $month = null): array {
@@ -185,19 +240,26 @@ final class Activity {
         $this->db->beginTransaction();
         try {
             $firstMonth = $this->db->query('SELECT MIN(month) FROM simulation_activity_months')->fetchColumn() ?: $currentMonth;
-            $count = $this->db->prepare('SELECT COUNT(*) AS total, COUNT(DISTINCT browser_key) AS browsers,
-                COALESCE(SUM(started),0) AS started, COUNT(quote) AS viewed, COUNT(request_id) AS submitted
-                FROM simulation_activity_months WHERE month=?');
+            $firstRequest = $this->db->query('SELECT MIN(received_at) FROM requests')->fetchColumn();
+            if ($firstRequest) $firstMonth = min($firstMonth, self::localTime($firstRequest)->format('Y-m'));
+            // A submission in a later month closes this draft in the list, but not other drafts from the same browser.
+            $openDraft = 'm.request_id IS NULL AND NOT EXISTS (SELECT 1 FROM simulation_activity a
+                WHERE a.draft_key=m.draft_key AND a.request_id IS NOT NULL)';
+            $count = $this->db->prepare("SELECT COUNT(CASE WHEN $openDraft THEN 1 END) AS total, COUNT(DISTINCT browser_key) AS browsers,
+                COALESCE(SUM(started),0) AS started, COUNT(quote) AS viewed
+                FROM simulation_activity_months m WHERE month=?");
             $count->execute([$month]);
             $totals = array_map('intval', $count->fetch());
-            $read = $this->db->prepare('SELECT last_seen,step,max_step,started,choices,payment,quote,request_id
-                FROM simulation_activity_months WHERE month=? ORDER BY last_seen DESC,draft_key LIMIT 25 OFFSET ?');
+            $totals['visitorsByDevice'] = $this->visitorsByDevice($month);
+            $read = $this->db->prepare("SELECT last_seen,step,max_step,started,choices,payment,quote,request_id,device,region
+                FROM simulation_activity_months m WHERE month=? AND $openDraft ORDER BY last_seen DESC,draft_key LIMIT 25 OFFSET ?");
             $read->bindValue(1, $month);
             $read->bindValue(2, ($page - 1) * 25, \PDO::PARAM_INT);
             $read->execute();
             $items = [];
             foreach ($read as $row) {
                 $items[] = [
+                    'device' => $row['device'], 'region' => $row['region'],
                     'lastActivityAt' => $row['last_seen'], 'step' => (int)$row['step'], 'maxStep' => (int)$row['max_step'],
                     'started' => (bool)$row['started'], 'configuration' => (object)json_decode($row['choices'], true, 16, JSON_THROW_ON_ERROR),
                     'paymentMethod' => $row['payment'], 'estimateViewed' => $row['quote'] !== null,

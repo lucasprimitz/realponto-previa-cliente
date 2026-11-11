@@ -9,6 +9,8 @@ return [
     'encryptionKey' => '', // Base64 de 32 bytes aleatórios; manter estável e guardar backup seguro.
     'passwordHash' => '', // Resultado de password_hash; nunca a senha em texto simples.
     'submissionsEnabled' => false, // Ativar somente após o teste completo da TI.
+    // Em hospedagem com proxy, habilitar apenas se a TI confirmou que o servidor reescreve REMOTE_ADDR a partir de proxies confiáveis.
+    'activityRemoteAddrVerified' => false,
     'developmentLoopback' => false, // Apenas teste local, nunca habilitar para endereço de rede.
     'mail' => [
         'enabled' => false,

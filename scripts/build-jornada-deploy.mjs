@@ -14,7 +14,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
-const BASE_STORE_BLOB = '1920e499fe9e2020d19807fb757411c74711ed7d';
+const BASE_STORE_BLOB = '296be9ddbf7094eb9e899e4dc567d384633a2722';
 const API_REQUIRE = "require dirname(__DIR__, 2) . '/src/bootstrap.php';";
 const API_REPLACE = "require __DIR__ . '/_bootstrap.php';";
 const DIGEST = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -68,7 +68,7 @@ export async function buildJornadaDeploy(destination, release, fromPackage = nul
     const pub = path.join(destination, 'public');
     await fs.mkdir(app, {recursive:true});
     await copyTree(path.join(service, 'public'), pub);
-    for (const entry of ['src', 'bin', 'composer.json', 'composer.lock', 'pricing.json']) {
+    for (const entry of ['src', 'bin', 'geo', 'composer.json', 'composer.lock', 'pricing.json']) {
       await copyTree(path.join(service, entry), path.join(app, entry));
     }
     // Dependência SMTP gerada com composer install --locked (não sobe configurações privadas).

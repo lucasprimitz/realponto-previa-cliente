@@ -35,6 +35,12 @@ class Client {
     return {status:response.status,body,headers:response.headers};
   }
 }
+const deviceHeaders = {
+  mobile: {'User-Agent':'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0 Mobile Safari/537.36'},
+  desktop: {'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0 Safari/537.36'},
+  tablet: {'User-Agent':'Mozilla/5.0 (iPad; CPU OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1'},
+};
+const zeroVisitors = {mobile:0, desktop:0};
 async function checkActivity(customer, admin, original, reportYear) {
   const ids = {browserId:randomUUID(), simulationId:randomUUID()};
   const initial = {...ids, revision:1, step:1, estimateViewed:false, configuration:{}, paymentMethod:null};
@@ -44,8 +50,8 @@ async function checkActivity(customer, admin, original, reportYear) {
     check(result.status,200,'Atividade disponível para o painel autenticado');
     return result.body;
   };
-  async function saved(data) {
-    const response = await save(data);
+  async function saved(data, headers = {}) {
+    const response = await save(data, {headers});
     check(response.status >= 200 && response.status < 300,true,'Evento aceito na etapa '+data.step);
   }
   function privateList(body, identifiers) {
@@ -61,16 +67,20 @@ async function checkActivity(customer, admin, original, reportYear) {
   for (const invalid of [
     {browserId:'nome-do-cliente'}, {simulationId:'00000000-0000-1000-8000-000000000000'},
     {revision:0}, {revision:1.5}, {revision:Number.MAX_SAFE_INTEGER+1}, {step:0}, {step:5},
-    {estimateViewed:'sim'}, {contact:request.contact}, {cpf:'12345678900'}, {extra:'campo livre'},
+    {estimateViewed:'sim'}, {contact:request.contact}, {cpf:'12345678900'}, {extra:'campo livre'}, {device:'mobile'}, {region:'Valor injetado'},
     {configuration:{system:'iponto',name:'Teste HTTP'}}, {configuration:{schedules:999999}},
     {paymentMethod:'método inválido'}, {estimate:{totalCents:1}}, {displayedTotalCents:54321},
   ]) {
     check((await save({...initial,...invalid})).status,422,'Dados inválidos ou pessoais rejeitados na coleta');
   }
   check((await list()).items.length,0,'Eventos rejeitados e pedidos antigos não geram atividade');
-  await saved(initial);
+  await saved(initial, {...deviceHeaders.mobile, 'CF-Region-Code':'SP', 'CF-IPCountry':'BR', 'X-Forwarded-For':'1.1.1.1'});
   const access = await list();
   check(access.summary.browsers,1,'Abertura registra um navegador');
+  check(access.items[0].device,'mobile','Categoria móvel é calculada no servidor');
+  check(access.items[0].region,null,'Acesso local ignora cabeçalhos de localização enviados pelo visitante');
+  check(access.summary.visitorsByDevice,{mobile:1,desktop:0},'A primeira visita basta para contar o celular; um envio sem identificador não inventa uma visita em computador');
+  check('submitted' in access.summary || 'byDevice' in access.summary,false,'Atividade não traz os indicadores de propostas enviadas');
   check(access.items.length,1,'Abertura visível sem preenchimento');
   check(access.items[0].started,false,'Abertura isolada ainda não iniciou configuração');
   check(access.items[0].estimate,null,'Abertura ainda sem estimativa');
@@ -78,7 +88,7 @@ async function checkActivity(customer, admin, original, reportYear) {
   check(Number.isFinite(Date.parse(access.items[0].lastActivityAt)),true,'Horário de atividade válido');
 
   const viewed = {...initial,revision:3,step:4,estimateViewed:true,configuration:request.configuration,paymentMethod:'pix'};
-  await saved(viewed);
+  await saved(viewed,deviceHeaders.mobile);
   const shown = (await list()).items[0];
   check(shown.started,true,'Configuração preenchida indica simulação iniciada');
   check(shown.configuration,request.configuration,'Painel recebe as opções configuradas');
@@ -87,35 +97,38 @@ async function checkActivity(customer, admin, original, reportYear) {
   check(estimate.status,'priced','Servidor precifica configuração que foi visualizada');
   check(estimate.totalCents,original.request.estimate.totalCents,'Estimativa corresponde ao preço calculado pelo servidor');
   const back = {...initial,revision:4,step:2,configuration:{system:'iponto',employees:null}};
-  await saved(back);
+  await saved(back,deviceHeaders.desktop);
   // Retransmissões podem receber confirmação ou conflito. Nenhuma pode retroceder o estado.
   for (const revision of [3,4]) {
     const retry = await save({...viewed,revision,configuration:{...request.configuration,schedules:'consultar'}});
     check([200,201,202,204,409].includes(retry.status),true,'Retransmissão de revisão já processada');
   }
-  const revisited = (await list()).items[0];
+  const afterReturn = await list();
+  check(afterReturn.summary.visitorsByDevice,{mobile:0,desktop:1},'O navegador continua contado uma vez após a revisão do aparelho e eventos atrasados');
+  const revisited = afterReturn.items[0];
+  check(revisited.device,'desktop','A linha reflete a última movimentação aceita e ignora a retransmissão');
   check(revisited.step,2,'Revisões antigas e repetidas não alteram etapa atual');
   check(revisited.maxStep,4,'Retorno preserva etapa máxima');
   check(revisited.estimateViewed,true,'Retorno preserva visualização anterior');
   check(revisited.estimate,estimate,'Retorno e retransmissão preservam o preço realmente visualizado');
   check(revisited.configuration.employees ?? null,null,'Seleção desfeita substitui valor anterior');
 
-  const second = {...initial,simulationId:randomUUID(),revision:1,step:2,configuration:{system:'iponto',bankHours:null}};
-  await saved(second);
+  const second = {...initial,simulationId:randomUUID(),revision:1,step:4,configuration:request.configuration};
+  await saved(second,deviceHeaders.tablet);
   const drafts = await list();
   check(drafts.items.length,2,'Duas simulações distintas no mesmo navegador');
   check(drafts.summary.browsers,1,'Navegador contado uma única vez');
   check(drafts.summary.started,2,'Duas simulações iniciadas');
+  check(drafts.summary.visitorsByDevice,zeroVisitors,'O último acesso foi por tablet e não entra nas linhas de celular ou computador');
   check(drafts.summary.viewed,1,'Somente uma estimativa visualizada');
-  check(drafts.summary.submitted,0,'Rascunhos não contam como solicitação');
   check((await list(2)).items.length,0,'Segunda página sem atividades adicionais');
   privateList(drafts,[ids.browserId,ids.simulationId,second.simulationId]);
   const changedCatalog = {...viewed, simulationId:second.simulationId, revision:2, displayedTotalCents:estimate.totalCents + 100};
-  await saved(changedCatalog);
+  await saved(changedCatalog,deviceHeaders.desktop);
   const captured = (await list()).items.find(row => row.estimate?.matchesCatalog === false);
   check(captured?.estimate.totalCents, changedCatalog.displayedTotalCents, 'Atividade preserva a quantia exibida antes de uma alteração de tabela');
   check((await save({...changedCatalog,displayedTotalCents:'valor livre'})).status,422,'Valor histórico só aceita centavos inteiros');
-  await saved({...viewed,simulationId:second.simulationId,revision:3,displayedTotalCents:null,configuration:{...request.configuration,employees:'consultar'}});
+  await saved({...viewed,simulationId:second.simulationId,revision:3,displayedTotalCents:null,configuration:{...request.configuration,employees:'consultar'}},deviceHeaders.desktop);
   const consultation = (await list()).items.find(row=>row.configuration.employees==='consultar');
   check(consultation?.estimate?.status,'consultation','Pacote sob consulta sinalizado no painel');
   check(consultation.estimate.totalCents,null,'Pacote sob consulta não recebe valor inventado');
@@ -124,8 +137,8 @@ async function checkActivity(customer, admin, original, reportYear) {
   check(report.total.totalCents,original.request.estimate.pixCents,'Rascunhos não afetam valor no relatório');
 
   const key = randomUUID();
-  const submit = (activity, idempotencyKey) => customer.call('requests.php',{
-    method:'POST',data:{...request,activity},headers:{'Idempotency-Key':idempotencyKey},
+  const submit = (activity, idempotencyKey, headers = deviceHeaders.desktop) => customer.call('requests.php',{
+    method:'POST',data:{...request,activity},headers:{'Idempotency-Key':idempotencyKey,...headers},
   });
   const created = await submit(ids,key);
   check(created.status,201,'Solicitação vinculada ao rascunho existente');
@@ -136,27 +149,26 @@ async function checkActivity(customer, admin, original, reportYear) {
   check(retried.status,200,'Mesmo rascunho com nova chave de envio é idempotente');
   check(retried.body.id,created.body.id,'Nova tentativa mantém o protocolo do rascunho');
   const linked = await list();
-  check(linked.items.length,2,'Envio não duplica o rascunho');
-  check(linked.summary.submitted,1,'Repetição não duplica a contagem de envios');
-  check(linked.items.filter(row=>row.requestId===created.body.id).length,1,'Somente o rascunho enviado recebe o protocolo');
+  check(linked.items,[consultation],'Envio retira apenas o rascunho concluído, mantendo o outro do mesmo navegador');
+  check(linked.total,1,'Total da lista conta somente pendentes');
+  check(linked.summary.visitorsByDevice,{mobile:0,desktop:1},'Duas simulações no mesmo computador e reenvios contam apenas um visitante');
+  check((await admin.call('requests.php?status=all')).body.items.some(row=>row.id===created.body.id),true,'Protocolo enviado segue disponível nas solicitações');
 
   const late = {browserId:randomUUID(),simulationId:randomUUID()};
-  const firstSubmission = await submit(late,randomUUID());
+  const firstSubmission = await submit(late,randomUUID(),deviceHeaders.mobile);
   check(firstSubmission.status,201,'Solicitação pode chegar antes do primeiro evento');
-  const awaitingEvent = (await list()).items.find(row=>row.requestId===firstSubmission.body.id);
-  check(awaitingEvent?.estimateViewed,false,'Somente o evento de visualização confirma que houve consulta ao orçamento');
-  await saved({...viewed,...late});
+  const awaitingEvent = await list();
+  check(awaitingEvent.items,linked.items,'Envio anterior ao primeiro evento nunca entra na fila de rascunhos');
+  check(awaitingEvent.summary.viewed,linked.summary.viewed,'Somente o evento de visualização confirma que houve consulta ao orçamento');
+  await saved({...viewed,...late},deviceHeaders.tablet);
   await saved({...back,...late});
   const finalList = await list();
-  check(finalList.items.length,3,'Evento tardio reaproveita a atividade do envio');
+  check(finalList.items,linked.items,'Eventos tardios não recolocam a solicitação na fila de rascunhos');
   check(finalList.summary.browsers,2,'Segundo navegador contado uma vez');
-  check(finalList.summary.submitted,2,'Dois envios contabilizados');
-  check(finalList.items.filter(row=>row.requestId===firstSubmission.body.id).length,1,'Evento tardio conserva vínculo ao protocolo correto');
-  const lateRow = finalList.items.find(row=>row.requestId===firstSubmission.body.id);
-  check(lateRow.estimateViewed,true,'Orçamento exibido antes do envio pode chegar ao servidor depois');
-  check(lateRow.estimate,estimate,'Evento tardio recupera o orçamento exibido');
-  check(lateRow.step,4,'Evento atrasado não altera a etapa final do envio');
-  check(lateRow.configuration,request.configuration,'Evento atrasado não altera a configuração efetivamente enviada');
+  check(finalList.summary.visitorsByDevice,{mobile:1,desktop:1},'Os dois navegadores contam uma vez cada mesmo que já tenham enviado a proposta');
+  check(finalList.summary.viewed,linked.summary.viewed+1,'Orçamento exibido antes do envio pode chegar ao servidor depois e conta uma vez');
+  const received = (await admin.call('requests.php?status=all')).body.items.find(row=>row.id===firstSubmission.body.id);
+  check(received.request.configuration,request.configuration,'Evento atrasado não altera a configuração efetivamente enviada');
   check((await admin.call('reports.php?year='+reportYear)).body.total.count,3,'Relatório contém um protocolo por envio concluído');
   privateList(finalList,[ids.browserId,ids.simulationId,second.simulationId,late.browserId,late.simulationId]);
   return initial;
@@ -190,7 +202,7 @@ async function seedLegacyActivity() {
     }
     $before = '2020-09-01T02:59:59Z';
     $after = '2020-09-01T03:00:00Z';
-    $insert->execute([$draft, $browser, $before, $before, 2, 2, 1, json_encode(['system' => 'rhid'])]);
+    $insert->execute([$draft, $browser, $before, $before, 2, 4, 1, json_encode(['system' => 'rhid'])]);
     $insert->execute(['draft-fixture-sept', $browser, $after, $after, 1, 1, 0, '{}']);
     $db->commit();
   `;
@@ -221,7 +233,7 @@ async function checkMonthlyActivity(customer, admin) {
   check(august.total,26,'O mês inclui somente seus próprios registros, mesmo após 90 dias');
   check(august.totalPages,2,'Paginação considera somente o mês selecionado');
   check(august.items.length,25,'Primeira página histórica limitada a 25 simulações');
-  check(august.summary,{browsers:1,started:1,viewed:0,submitted:0},'Indicadores mensais deduplicam o navegador');
+  check(august.summary,{browsers:1,started:1,viewed:0,visitorsByDevice:zeroVisitors},'Indicadores mensais deduplicam o navegador histórico sem inferir aparelho');
   check(august.items[0].lastActivityAt,'2020-09-01T02:59:59Z','23h59m59 em São Paulo pertence a agosto');
   const pageTwo = await listing('2020-08',2);
   check(pageTwo.items.length,1,'Último registro disponível na segunda página');
@@ -232,9 +244,17 @@ async function checkMonthlyActivity(customer, admin) {
   check(september.items[0].lastActivityAt,'2020-09-01T03:00:00Z','UTC convertido para o mês local correto');
   const empty = await listing('2020-10');
   check(empty.items,[],'Mês intermediário sem registros pode ser consultado');
-  check(empty.summary,{browsers:0,started:0,viewed:0,submitted:0},'Mês vazio apresenta totais zerados');
+  check(empty.summary,{browsers:0,started:0,viewed:0,visitorsByDevice:zeroVisitors},'Mês vazio apresenta totais zerados');
 
-  const continued = {...returningVisitor, revision:2, step:4, estimateViewed:true,
+  const justReturned = await customer.call('activity.php',{method:'POST',data:{
+    ...returningVisitor, revision:2, step:2, estimateViewed:false, configuration:{system:'rhid'}
+  }, headers:deviceHeaders.mobile});
+  check(justReturned.status,200,'Rascunho antigo pode voltar apenas para a segunda etapa');
+  const withoutNewStageFour = await listing(current);
+  check(withoutNewStageFour.summary.visitorsByDevice,{...initial.summary.visitorsByDevice,mobile:initial.summary.visitorsByDevice.mobile+1},'Navegador que retorna por celular conta neste mês sem chegar novamente à etapa 4');
+  check(august.items[0].device,'unknown','Dados históricos não recebem aparelho por inferência');
+  check(august.items[0].region,null,'Dados históricos não recebem região por inferência');
+  const continued = {...returningVisitor, revision:3, step:4, estimateViewed:true,
     configuration:request.configuration, paymentMethod:'pix'};
   for (let retry = 0; retry < 2; retry++) {
     const saved = await customer.call('activity.php',{method:'POST',data:continued});
@@ -247,12 +267,15 @@ async function checkMonthlyActivity(customer, admin) {
   const sent = await customer.call('requests.php',{method:'POST',data:{...request,activity:returningVisitor},headers:{'Idempotency-Key':randomUUID()}});
   check(sent.status,201,'Rascunho iniciado em outro mês pode virar solicitação');
   const submitted = await listing(current);
-  check(submitted.total,resumed.total,'Envio mantém o rascunho do mês da retomada');
-  check(submitted.summary.submitted,initial.summary.submitted+1,'Protocolo contabilizado no mês do envio');
-  check(submitted.items.filter(item=>item.requestId===sent.body.id).length,1,'Protocolo consta uma vez no mês correspondente');
-  const unchanged = await listing('2020-08');
-  check(unchanged.items,august.items,'Retomadas e envios posteriores preservam escolhas e etapa do mês original');
-  check(unchanged.summary,august.summary,'Retomada não altera as contagens dos meses anteriores');
+  check(submitted.total,resumed.total-1,'Envio retira a simulação da fila do mês da retomada');
+  check(submitted.summary.browsers,resumed.summary.browsers,'Envio mantém a contagem de visitantes do mês');
+  check(submitted.items.every(item=>item.requestId===null),true,'A listagem é exclusiva de visitas e rascunhos em aberto');
+  const previous = await listing('2020-08');
+  check(previous.total,25,'Envio posterior retira somente o rascunho correspondente da lista histórica');
+  check(previous.totalPages,1,'Paginação usa o total filtrado de movimentações mesmo nos meses anteriores');
+  check(previous.items,[...august.items.slice(1),...pageTwo.items],'A primeira página é preenchida pelos 25 rascunhos ainda abertos do mesmo navegador');
+  check((await listing('2020-08',2)).items,[],'Segunda página fica vazia após a retirada do rascunho enviado');
+  check(previous.summary,august.summary,'Retomada e envio não alteram os indicadores do mês anterior');
 }
 
 const request={schemaVersion:1,createdAt:'1900-01-01',contact:{name:'Teste HTTP',company:'Empresa Exemplo',email:'teste@example.invalid',phone:'11999999999',taxId:null},configuration:{system:'iponto',schedules:10,employees:40,bankHours:true,workScale:false},payment:{method:'pix',label:'fake'},estimate:{totalCents:1},consent:true};
@@ -271,7 +294,7 @@ try {
   check((await customer.call('requests.php',{method:'POST',data:request,headers:{Origin:'https://evil.example.invalid'}})).status,403,'Origem externa bloqueada');
   check((await customer.call('requests.php',{method:'POST',data:request,headers:{'Content-Type':'text/plain'}})).status,415,'Tipo de conteúdo rejeitado');
   check((await customer.call('requests.php',{method:'POST',raw:JSON.stringify({payload:'a'.repeat(17000)})})).status,413,'Corpo limitado');
-  const key=randomUUID(); const created=await customer.call('requests.php',{method:'POST',data:request,headers:{'Idempotency-Key':key}});
+  const key=randomUUID(); const created=await customer.call('requests.php',{method:'POST',data:request,headers:{'Idempotency-Key':key,...deviceHeaders.desktop}});
   check(created.status,201,'Recebimento persistido'); check(created.body.mailStatus,'disabled','SMTP não configurado não perde contato');
   assert.equal('request' in created.body,false); assert.equal('contact' in created.body,false); checks+=2;
   result=await customer.call('requests.php',{method:'POST',data:{...request,createdAt:'2030-01-01'},headers:{'Idempotency-Key':key}});

@@ -92,6 +92,14 @@
 /* Atividade do simulador */
 .activity-toolbar { flex-wrap: wrap; }
 .activity-toolbar .filter-field { flex: 1 1 155px; min-width: 0; max-width: 240px; }
+.activity-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.activity-device-breakdown { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); align-items: center; gap: 16px; padding: 16px 20px; color: white; background: var(--blue); border: 1px solid var(--blue); border-radius: 15px; }
+.activity-device-breakdown h2 { margin: 0; color: inherit; font-size: 17px; }
+.activity-device-breakdown dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+.activity-device-breakdown dl > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 20px; border-left: 1px solid rgb(255 255 255 / 35%); }
+.activity-device-breakdown dt { color: #e4e3ff; font-size: 14px; font-weight: 600; }
+.activity-device-breakdown dd { margin: 0; color: inherit; font-size: 21px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.activity-source { margin: 12px 0; color: var(--muted); font-size: 12px; }
 .activity-list-title { color: var(--deep); margin: 28px 0 8px; }
 .activity-list {
   display: grid;
@@ -108,10 +116,10 @@
 }
 .activity-summary {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, .85fr) 12px;
-  grid-template-areas: "heading step status arrow";
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, .85fr) 12px;
+  grid-template-areas: "heading step status arrow" "metadata metadata status arrow";
   align-items: center;
-  gap: 10px 20px;
+  gap: 5px 20px;
   padding: 14px 18px;
   border-radius: 11px;
   list-style: none;
@@ -120,13 +128,26 @@ summary.activity-summary { cursor: pointer; }
 .activity-summary::-webkit-details-marker { display: none; }
 summary.activity-summary:hover, .activity-card details[open] > summary { background: #f7f7fc; }
 .activity-summary:focus-visible { outline-offset: -3px; }
-.activity-summary-heading { grid-area: heading; display: grid; gap: 3px; min-width: 0; }
-.activity-summary-heading strong { color: var(--deep); font-size: 16px; }
+.activity-card-title { grid-area: heading; min-width: 0; color: var(--deep); font-size: 16px; }
+.activity-access-meta {
+  grid-area: metadata;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 20px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.activity-access-meta > span { position: relative; max-width: 100%; overflow-wrap: anywhere; }
+.activity-access-meta strong { color: var(--deep); font-weight: 700; }
+.activity-meta-divider { position: absolute; left: -12px; color: #9a9bb2; }
 .activity-card-time { margin: 0; color: var(--muted); font-size: 12px; }
+.activity-access-meta .activity-card-time { font-size: inherit; }
 .activity-stage { grid-area: step; color: var(--deep); font-size: 14px; font-weight: 600; }
 .activity-status-group {
   grid-area: status;
-  justify-self: end;
+  justify-self: center;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -146,7 +167,6 @@ summary.activity-summary:hover, .activity-card details[open] > summary { backgro
   font-weight: 650;
 }
 .activity-status-pill.unfinished { background: #fff0d8; color: #7a4308; }
-.activity-status-pill.submitted { background: #e7f5ec; color: #235b39; }
 .activity-chevron {
   grid-area: arrow;
   justify-self: center;
@@ -189,19 +209,25 @@ summary.activity-summary:hover, .activity-card details[open] > summary { backgro
   font-size: 13px;
 }
 .activity-outcome strong { font-size: 18px; }
-.activity-protocol { margin: 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 @media (max-width: 760px) {
   .activity-summary {
-    grid-template-columns: minmax(0, 1fr) fit-content(34%) 12px;
-    grid-template-areas: "heading status arrow" "step status arrow";
+    grid-template-columns: minmax(0, 1fr) min(40%, 10.5rem) 12px;
+    grid-template-areas: "heading status arrow" "step status arrow" "metadata metadata metadata";
     gap: 8px 12px;
     padding: 12px 14px;
   }
   .activity-body { padding: 14px; }
+  .activity-device-breakdown { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 14px; }
+  .activity-device-breakdown dl > div { padding: 0 12px; }
+  .activity-device-breakdown dl > div:first-child { border: 0; padding-left: 0; }
+  .activity-device-breakdown dl > div:last-child { padding-right: 0; }
 }
 @media (max-width: 600px) {
+  .activity-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .activity-metrics > :first-child { grid-column: 1 / -1; }
   .activity-toolbar { gap: 10px; padding: 12px; }
   .activity-toolbar .filter-field { flex-basis: 125px; }
+  .activity-toolbar select { font-size: 14px; padding-inline: 7px 2px; }
   .activity-toolbar .button { padding: 10px; font-size: 13px; }
   .workspace-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .workspace-tab { padding: 10px 4px; line-height: 1.35; font-size: 13px; }

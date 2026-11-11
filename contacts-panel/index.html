@@ -60,17 +60,25 @@
           <button id="refresh-activity" class="button secondary" type="button">Atualizar atividade</button>
         </div>
         <div id="activity-metrics" class="report-metrics activity-metrics" aria-label="Resumo do mês"></div>
-        <h2 class="activity-list-title">Movimentações do mês</h2>
+        <section id="activity-devices" class="activity-device-breakdown" aria-labelledby="activity-devices-title" hidden>
+          <h2 id="activity-devices-title">Navegadores por dispositivo</h2>
+          <dl>
+            <div><dt>Celular</dt><dd id="activity-mobile-total"></dd></div>
+            <div><dt>Computador</dt><dd id="activity-desktop-total"></dd></div>
+          </dl>
+        </section>
+        <h2 class="activity-list-title">Visitas e simulações em aberto</h2>
         <p id="activity-status" class="hint" role="status" aria-live="polite"></p>
-        <ul id="activity-list" class="activity-list" aria-label="Últimas movimentações"></ul>
+        <ul id="activity-list" class="activity-list" aria-label="Visitas e simulações em aberto no mês"></ul>
         <div id="activity-empty" class="empty-card" hidden>
-          <h2>Nenhuma atividade registrada neste mês.</h2>
+          <h2>Nenhuma visita ou simulação em aberto neste mês.</h2>
         </div>
         <nav id="activity-pagination" class="pagination" aria-label="Páginas de atividade" hidden>
           <button id="activity-previous" class="button secondary" type="button">← Anterior</button>
           <span id="activity-page"></span>
           <button id="activity-next" class="button secondary" type="button">Próxima →</button>
         </nav>
+        <p class="activity-source">Região aproximada da conexão. Geolocalização por <a href="https://db-ip.com" target="_blank" rel="noopener noreferrer">DB-IP</a>.</p>
       </section>
       <section id="reports-view" role="tabpanel" aria-labelledby="reports-tab" hidden>
         <div class="toolbar report-toolbar"><div><h2>Movimento das solicitações</h2><p class="hint">Acompanhe os contatos recebidos e o investimento estimado em cada mês.</p></div><div class="report-filters"><div class="filter-field"><label for="report-year">Ano</label><input id="report-year" type="number" inputmode="numeric" min="2000" max="2100" step="1"></div><button id="refresh-reports" class="button secondary" type="button">Atualizar relatório</button></div></div>

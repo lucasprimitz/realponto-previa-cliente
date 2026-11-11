@@ -9,6 +9,31 @@ function problem(callable $fn, int $status): void { try { $fn(); } catch (Proble
 $testDirectory = sys_get_temp_dir() . '/realponto-contacts-test-' . bin2hex(random_bytes(8));
 $settings = ['origin' => 'http://127.0.0.1:8999', 'dataDirectory' => $testDirectory, 'encryptionKey' => base64_encode(random_bytes(32)), 'passwordHash' => password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT), 'submissionsEnabled' => true, 'developmentLoopback' => true, 'mail' => ['enabled' => false]];
 $config = new Config($settings); $store = new Store($config); $domain = Domain::load();
+function checkAccessContext(Config $config): void {
+    $path = dirname(__DIR__) . '/geo/br-regions.db';
+    check(is_file($path), 'A base regional de referência acompanha o serviço.');
+    $db = new PDO('sqlite:' . $path);
+    $find = $db->prepare("SELECT first,last,region FROM ranges WHERE family=? AND region='São Paulo, Brasil' LIMIT 1");
+    $original = $_SERVER;
+    try {
+        foreach ([4, 6] as $family) {
+            $find->execute([$family]);
+            $range = $find->fetch(PDO::FETCH_ASSOC);
+            check((bool)$range, 'Há faixas públicas brasileiras de IPv' . $family);
+            foreach (['first','last'] as $bound) {
+                $_SERVER = ['REMOTE_ADDR' => inet_ntop($range[$bound]), 'HTTP_USER_AGENT' => 'Mozilla/5.0 (iPhone) Mobile Safari'];
+                check(\Realponto\AccessContext::fromServer($config) === ['device' => 'mobile','region' => $range['region']], 'Extremo da faixa IPv' . $family);
+            }
+            $_SERVER['HTTP_X_FORWARDED_FOR'] = '198.51.100.1';
+            check(\Realponto\AccessContext::fromServer($config)['region'] === null, 'Proxy de origem incerta não recebe a região da borda.');
+        }
+        $_SERVER = ['REMOTE_ADDR' => '127.0.0.1', 'HTTP_X_FORWARDED_FOR' => inet_ntop($range['first'])];
+        check(\Realponto\AccessContext::fromServer($config) === ['device' => 'unknown','region' => null], 'IP privado e cabeçalho de origem injetado não indicam região.');
+    } finally {
+        $_SERVER = $original;
+    }
+}
+checkAccessContext($config);
 $input = ['schemaVersion' => 1, 'createdAt' => '1900-01-01', 'contact' => ['name' => 'Cliente de Teste', 'company' => 'Empresa de Teste', 'email' => 'teste@example.invalid', 'phone' => '(11) 99999-9999', 'taxId' => '123.456.789-09'], 'configuration' => ['system' => 'iponto', 'schedules' => 10, 'employees' => 40, 'bankHours' => true, 'workScale' => false], 'payment' => ['method' => 'pix', 'label' => 'forged'], 'estimate' => ['totalCents' => 1], 'consent' => true];
 $catalog = json_decode(file_get_contents(dirname(__DIR__) . '/pricing.json'), true, 64, JSON_THROW_ON_ERROR);
 $now = new DateTimeImmutable($catalog['campaign']['deadlineISO'] . 'T12:00:00-03:00');

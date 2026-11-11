@@ -48,6 +48,9 @@ export async function packageCustomerService(destination, releaseId) {
   for (const file of ['composer.json', 'config.example.php']) files.set(file, await fs.readFile(path.join(root, 'customer-service', file)));
   try { files.set('composer.lock', await fs.readFile(path.join(root, 'customer-service/composer.lock'))); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
+  for (const name of ['geo/br-regions.db', 'geo/LICENSE.md']) {
+    files.set(name, await fs.readFile(path.join(root, 'customer-service', name)));
+  }
   files.set('config/nginx.conf.example', await fs.readFile(path.join(root, 'nginx/contacts-service.conf.example')));
   files.set('pricing.json', Buffer.from(JSON.stringify(contactPricing(), null, 2) + '\n'));
   files.set('LEIA-ME-TI.md', await fs.readFile(path.join(root, 'docs/SOLICITACOES-PHP-TI.md')));

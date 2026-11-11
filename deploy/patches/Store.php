@@ -53,7 +53,7 @@ final class Store {
         } catch (\Throwable $error) { $this->db->exec('ROLLBACK'); throw $error; }
         if ($count > $maximum) throw new Problem(429, 'Muitas tentativas. Aguarde alguns minutos e tente novamente.');
     }
-    public function create(array $request, string $idempotencyKey, ?array $activityIdentity = null): array {
+    public function create(array $request, string $idempotencyKey, ?array $activityIdentity = null, array $access = []): array {
         if (!preg_match('/^[a-zA-Z0-9_-]{20,80}$/D', $idempotencyKey)) throw new Problem(422, 'Identificador de envio inválido.');
         $keyHash = hash_hmac('sha256', $idempotencyKey, $this->config->key);
         $inputHash = hash_hmac('sha256', json_encode([$request['contact'], $request['configuration'], $request['payment']['method'], $request['consent']], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE), $this->config->key);
@@ -73,7 +73,7 @@ final class Store {
                 $insert = $this->db->prepare('INSERT INTO requests(id,key_hash,input_hash,payload,note,received_at,mail_status) VALUES (?,?,?,?,?,?,?)');
                 $insert->execute([$row['id'], $keyHash, $inputHash, $this->encrypt(json_encode($request, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)),
                     $this->encrypt(''), $row['received_at'], $row['mail_status']]);
-                if ($activityIdentity !== null) $this->activity->link($activityIdentity, $row['id'], $request);
+                if ($activityIdentity !== null) $this->activity->link($activityIdentity, $row['id'], $request, $access);
             } elseif (!hash_equals($row['input_hash'], $inputHash)) {
                 throw new Problem(409, 'Esse envio já foi utilizado com outros dados. Inicie uma nova simulação.');
             }

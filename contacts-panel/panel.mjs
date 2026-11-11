@@ -19,7 +19,7 @@ const activityMonth = $('#activity-month');
 const monthFormat = new Intl.DateTimeFormat('pt-BR', {year: 'numeric', month: 'long', timeZone: 'UTC'});
 const views = {
   requests: ['Solicitações recebidas', 'Organize os contatos, confira o investimento e encaminhe cada solicitação.'],
-  activity: ['Atividade do simulador', 'Acompanhe as simulações de cada mês e veja quais geraram uma solicitação.'],
+  activity: ['Atividade do simulador', 'Consulte as visitas e acompanhe as simulações em aberto no mês.'],
   reports: ['Relatórios mensais', 'Veja o movimento dos contatos e os valores estimados ao longo do ano.'],
 };
 const viewNames = Object.keys(views);
@@ -453,9 +453,18 @@ function clearSimulationActivity() {
   $('#activity-pagination').hidden = true;
   $('#activity-list').replaceChildren();
   $('#activity-metrics').replaceChildren();
+  $('#activity-devices').hidden = true;
+  $('#activity-mobile-total').textContent = '';
+  $('#activity-desktop-total').textContent = '';
 }
 
 const activitySteps = ['Seu sistema', 'Quantidades', 'Rotina de ponto', 'Sua proposta'];
+const activityDevices = new Map([
+  ['mobile', 'Celular'],
+  ['desktop', 'Computador'],
+  ['tablet', 'Tablet'],
+  ['unknown', 'Não identificado'],
+]);
 
 function activityChoices(configuration, paymentMethod) {
   const details = textElement('dl', 'activity-details', '');
@@ -477,16 +486,29 @@ function renderSimulation(item) {
   const choices = activityChoices(configuration, item.paymentMethod);
   const hasChoices = choices.childElementCount > 0;
   const summary = textElement(hasChoices ? 'summary' : 'div', 'activity-summary', '');
-  const heading = textElement('span', 'activity-summary-heading', '');
   const title = configuration.system ? systemLabel(configuration.system) : 'Visita ao simulador';
-  heading.append(textElement('strong', '', title), textElement('span', 'activity-card-time', 'Última atividade · ' + receivedDate(item.lastActivityAt)));
+  const meta = textElement('span', 'activity-access-meta', '');
+  const device = activityDevices.get(item.device) ?? activityDevices.get('unknown');
+  const region = typeof item.region === 'string' && item.region.trim() ? item.region : 'Não informada';
+  for (const [field, label, value] of [
+    ['activity-card-time', 'Data e hora', receivedDate(item.lastActivityAt)],
+    ['activity-device', 'Origem', device],
+    ['activity-region', 'Região aprox.', region],
+  ]) {
+    const group = textElement('span', field, '');
+    if (meta.childElementCount) {
+      const divider = textElement('span', 'activity-meta-divider', '|');
+      divider.setAttribute('aria-hidden', 'true');
+      group.append(divider);
+    }
+    group.append(label + ' ', textElement('strong', '', value));
+    meta.append(group);
+  }
+  const heading = textElement('strong', 'activity-card-title', title);
 
   const step = 'Etapa ' + item.maxStep + ' de 4 · ' + activitySteps[item.maxStep - 1];
   const status = textElement('span', 'activity-status-pill', item.started ? 'Preenchimento iniciado' : 'Página visitada');
-  if (item.requestId) {
-    status.textContent = 'Solicitação enviada';
-    status.classList.add('submitted');
-  } else if (item.maxStep === 4) {
+  if (item.maxStep === 4) {
     status.textContent = 'Não finalizado';
     status.classList.add('unfinished');
   }
@@ -494,7 +516,7 @@ function renderSimulation(item) {
   const statusGroup = textElement('span', 'activity-status-group', '');
   statusGroup.append(status);
   if (!hasChoices) statusGroup.append(textElement('span', 'activity-empty-choices', 'Nenhuma escolha registrada.'));
-  summary.append(heading, stage, statusGroup);
+  summary.append(heading, stage, statusGroup, meta);
 
   const body = textElement('div', 'activity-body', '');
   if (item.step && item.step !== item.maxStep) {
@@ -508,9 +530,6 @@ function renderSimulation(item) {
     if (item.estimate.matchesCatalog === false) {
       body.append(textElement('p', 'activity-card-time', 'O valor exibido no navegador difere da tabela vigente no registro.'));
     }
-  }
-  if (item.requestId) {
-    body.append(textElement('p', 'activity-protocol', 'Protocolo da solicitação · ' + item.requestId));
   }
   if (hasChoices) {
     const arrow = textElement('span', 'activity-chevron', '');
@@ -545,29 +564,45 @@ function showActivityMonths({firstMonth, currentMonth, month}) {
   activityMonth.value = month;
 }
 
+function renderDeviceSummary(visitorsByDevice) {
+  const section = $('#activity-devices');
+  const {mobile, desktop} = visitorsByDevice ?? {};
+  if (![mobile, desktop].every(value => Number.isSafeInteger(value) && value >= 0)) {
+    section.hidden = true;
+    return;
+  }
+  $('#activity-mobile-total').textContent = mobile.toLocaleString('pt-BR');
+  $('#activity-desktop-total').textContent = desktop.toLocaleString('pt-BR');
+  section.hidden = false;
+}
+
 function renderSimulationActivity(result) {
   const stats = result.summary;
-  const metricNames = ['browsers', 'started', 'viewed', 'submitted'];
+  const metricNames = ['browsers', 'started', 'viewed'];
   if (!Array.isArray(result.items) || !Number.isSafeInteger(result.total) || !stats ||
       !metricNames.every(name => Number.isSafeInteger(stats[name]) && stats[name] >= 0)) {
     throw new Error('Não foi possível conferir as atividades. Tente atualizar novamente.');
   }
   const number = value => value.toLocaleString('pt-BR');
   showActivityMonths(result);
-  const items = result.items.map(renderSimulation);
+  const items = result.items.filter(item => !item.requestId).map(renderSimulation);
   $('#activity-metrics').replaceChildren(
     reportMetric('Navegadores', number(stats.browsers), 'Navegadores distintos com visitas registradas.'),
     reportMetric('Preenchimento iniciado', number(stats.started), 'Simulações com pelo menos uma escolha.'),
-    reportMetric('Orçamento visualizado', number(stats.viewed), 'Simulações que chegaram ao orçamento.'),
-    reportMetric('Solicitação enviada', number(stats.submitted), 'Simulações vinculadas a um protocolo.', true)
+    reportMetric('Orçamento visualizado', number(stats.viewed), 'Simulações que chegaram ao orçamento.')
   );
+  renderDeviceSummary(stats.visitorsByDevice);
   $('#activity-list').replaceChildren(...items);
   $('#activity-empty').hidden = result.total !== 0;
   activityPagination.page = result.page;
   activityPagination.totalPages = Math.max(1, result.totalPages);
   $('#activity-pagination').hidden = activityPagination.totalPages <= 1;
   $('#activity-page').textContent = 'Página ' + result.page + ' de ' + activityPagination.totalPages;
-  $('#activity-status').textContent = result.total === 1 ? '1 simulação registrada.' : number(result.total) + ' simulações registradas.';
+  // Older servers return totals that also include completed simulations.
+  const pageOnly = !stats.visitorsByDevice;
+  const count = pageOnly ? items.length : result.total;
+  const label = count === 1 ? 'registro em aberto' : 'registros em aberto';
+  $('#activity-status').textContent = number(count) + ' ' + label + (pageOnly ? ' nesta página.' : '.');
 }
 
 async function loadSimulationActivity(page) {

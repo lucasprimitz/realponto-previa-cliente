@@ -28,6 +28,8 @@ test('pacote funcional separa o PHP e os segredos dos arquivos públicos e prese
   }
   assert.ok(manifest.files.some(item => item.file === 'composer.lock'));
   assert.ok(manifest.files.some(item => item.file === 'SINCRONIZACAO-PRECOS.md'));
+  assert.ok(manifest.files.some(item => item.file === 'src/AccessContext.php'));
+  for (const name of ['geo/br-regions.db', 'geo/LICENSE.md']) assert.ok(manifest.files.some(item => item.file === name));
   assert.ok(manifest.files.some(item => item.file === 'src/Http.php'));
   assert.ok(manifest.files.some(item => item.file === 'public/api/reports.php'));
   assert.ok(manifest.files.some(item => item.file === 'public/api/activity.php'));
