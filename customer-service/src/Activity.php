@@ -17,6 +17,7 @@ final class Activity {
         $db->exec('CREATE INDEX IF NOT EXISTS simulation_activity_seen ON simulation_activity(last_seen DESC, draft_key)');
         $this->initializeMonthlyHistory();
         $this->initializeAccessContext();
+        $this->initializeTrafficHistory();
         $this->db->exec('CREATE INDEX IF NOT EXISTS requests_activity_received ON requests(received_at)');
     }
 
@@ -34,8 +35,10 @@ final class Activity {
         ];
     }
 
-    private function hasMonthlyHistory(): bool {
-        return (bool)$this->db->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='simulation_activity_months'")->fetchColumn();
+    private function hasTable(string $name): bool {
+        $find = $this->db->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?");
+        $find->execute([$name]);
+        return (bool)$find->fetchColumn();
     }
 
     private static function localTime(string $instant): \DateTimeImmutable {
@@ -43,10 +46,10 @@ final class Activity {
     }
 
     private function initializeMonthlyHistory(): void {
-        if ($this->hasMonthlyHistory()) return;
+        if ($this->hasTable('simulation_activity_months')) return;
         $this->db->exec('BEGIN IMMEDIATE');
         try {
-            if (!$this->hasMonthlyHistory()) {
+            if (!$this->hasTable('simulation_activity_months')) {
                 $this->db->exec("CREATE TABLE simulation_activity_months (
                     month TEXT NOT NULL, draft_key TEXT NOT NULL, browser_key TEXT NOT NULL, last_seen TEXT NOT NULL,
                     step INTEGER NOT NULL, max_step INTEGER NOT NULL, started INTEGER NOT NULL, choices TEXT NOT NULL,
@@ -107,6 +110,46 @@ final class Activity {
             $this->db->exec('ROLLBACK');
             throw $error;
         }
+    }
+
+    private function initializeTrafficHistory(): void {
+        if ($this->hasTable('simulation_traffic_tracking')) return;
+        $this->db->exec('BEGIN IMMEDIATE');
+        try {
+            if (!$this->hasTable('simulation_traffic_tracking')) {
+                $this->db->exec("CREATE TABLE simulation_traffic_tracking (
+                    id INTEGER PRIMARY KEY CHECK(id=1), started_at TEXT NOT NULL
+                );
+                CREATE TABLE simulation_activity_hours (
+                    local_day TEXT NOT NULL, local_hour INTEGER NOT NULL CHECK(local_hour BETWEEN 0 AND 23),
+                    browser_key TEXT NOT NULL, PRIMARY KEY(local_day,local_hour,browser_key)
+                ) WITHOUT ROWID");
+                $this->db->prepare('INSERT INTO simulation_traffic_tracking(id,started_at) VALUES (1,?)')
+                    ->execute([gmdate('Y-m-d\TH:i:s\Z')]);
+                // Snapshots prove presence at their timestamps only. Never fill the hours between them.
+                $history = $this->db->query('SELECT browser_key, first_seen AS seen_at FROM simulation_activity
+                    UNION ALL SELECT browser_key, last_seen FROM simulation_activity
+                    UNION ALL SELECT browser_key, last_seen FROM simulation_activity_months');
+                $insert = $this->trafficInsert();
+                foreach ($history as $row) {
+                    $this->savePresence($row['browser_key'], $row['seen_at'], $insert);
+                }
+            }
+            $this->db->exec('COMMIT');
+        } catch (\Throwable $error) {
+            $this->db->exec('ROLLBACK');
+            throw $error;
+        }
+    }
+
+    private function trafficInsert(): \PDOStatement {
+        return $this->db->prepare('INSERT INTO simulation_activity_hours(local_day,local_hour,browser_key) VALUES (?,?,?)
+            ON CONFLICT(local_day,local_hour,browser_key) DO NOTHING');
+    }
+
+    private function savePresence(string $browser, string $timestamp, ?\PDOStatement $insert = null): void {
+        $local = self::localTime($timestamp);
+        ($insert ?? $this->trafficInsert())->execute([$local->format('Y-m-d'), (int)$local->format('G'), $browser]);
     }
 
     private function saveMonth(string $draft, string $lastSeen): void {
@@ -188,6 +231,7 @@ final class Activity {
                         $quote, $newQuote ? $revision : $row['quote_revision'], $now,
                         $fresh ? $device : $row['device'], $fresh ? ($access['region'] ?? null) : $row['region'], $identity['draft']]);
                     $this->saveMonth($identity['draft'], $now);
+                    if ($fresh) $this->savePresence($identity['browser'], $now);
                 }
             }
             $this->db->exec('COMMIT');
@@ -215,6 +259,7 @@ final class Activity {
         $update->execute([$requestId, json_encode($request['configuration'], JSON_THROW_ON_ERROR),
             $request['payment']['method'], $request['createdAt'], $device, $access['region'] ?? null, $identity['draft']]);
         $this->saveMonth($identity['draft'], $request['createdAt']);
+        $this->savePresence($identity['browser'], $request['createdAt']);
     }
 
     private function visitorsByDevice(string $month): array {
@@ -230,9 +275,34 @@ final class Activity {
         return $counts;
     }
 
+    private function monthlyTraffic(string $month, \DateTimeImmutable $now): array {
+        $start = new \DateTimeImmutable($month . '-01 00:00:00', new \DateTimeZone(self::TIME_ZONE));
+        $bounds = [$start->format('Y-m-d'), $start->format('Y-m-t')];
+        $daily = $this->db->prepare('SELECT local_day, COUNT(DISTINCT browser_key)
+            FROM simulation_activity_hours WHERE local_day BETWEEN ? AND ? GROUP BY local_day');
+        $daily->execute($bounds);
+        $counts = $daily->fetchAll(\PDO::FETCH_KEY_PAIR);
+        $days = [];
+        $lastDay = (int)$start->format('t');
+        for ($day = 1; $day <= $lastDay; $day++) {
+            $date = sprintf('%s-%02d', $month, $day);
+            $days[] = ['date' => $date, 'browsers' => (int)($counts[$date] ?? 0)];
+        }
+        // Each stored row is one browser in one concrete local date/hour.
+        $hourly = $this->db->prepare('SELECT local_hour, COUNT(*) AS total
+            FROM simulation_activity_hours WHERE local_day BETWEEN ? AND ? GROUP BY local_hour');
+        $hourly->execute($bounds);
+        $hours = array_fill(0, 24, 0);
+        foreach ($hourly as $row) $hours[(int)$row['local_hour']] = (int)$row['total'];
+        $started = $this->db->query('SELECT started_at FROM simulation_traffic_tracking WHERE id=1')->fetchColumn();
+        return ['timeZone' => self::TIME_ZONE, 'trackingStartedAt' => $started, 'asOf' => $now->format('Y-m-d\TH:i:s\Z'),
+            'partialHistory' => $start < new \DateTimeImmutable($started), 'days' => $days, 'hours' => $hours];
+    }
+
     public function listing(int $page, mixed $month = null): array {
         if ($page < 1 || $page > 100000) throw new Problem(422, 'Página inválida.');
-        $currentMonth = self::localTime('now')->format('Y-m');
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $currentMonth = $now->setTimezone(new \DateTimeZone(self::TIME_ZONE))->format('Y-m');
         $month ??= $currentMonth;
         if (!is_string($month) || !preg_match('/^(?!0000)[0-9]{4}-(0[1-9]|1[0-2])$/D', $month)) {
             throw new Problem(422, 'Mês inválido.');
@@ -251,6 +321,7 @@ final class Activity {
             $count->execute([$month]);
             $totals = array_map('intval', $count->fetch());
             $totals['visitorsByDevice'] = $this->visitorsByDevice($month);
+            $traffic = $this->monthlyTraffic($month, $now);
             $read = $this->db->prepare("SELECT last_seen,step,max_step,started,choices,payment,quote,request_id,device,region
                 FROM simulation_activity_months m WHERE month=? AND $openDraft ORDER BY last_seen DESC,draft_key LIMIT 25 OFFSET ?");
             $read->bindValue(1, $month);
@@ -275,6 +346,7 @@ final class Activity {
         $total = $totals['total'];
         unset($totals['total']);
         return ['ok' => true, 'page' => $page, 'total' => $total, 'totalPages' => max(1, (int)ceil($total / 25)),
-            'month' => $month, 'currentMonth' => $currentMonth, 'firstMonth' => $firstMonth, 'summary' => $totals, 'items' => $items];
+            'month' => $month, 'currentMonth' => $currentMonth, 'firstMonth' => $firstMonth,
+            'summary' => $totals, 'traffic' => $traffic, 'items' => $items];
     }
 }

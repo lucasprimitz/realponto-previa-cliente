@@ -31,6 +31,10 @@ O painel Atividade do simulador preserva o histórico por mês desde o primeiro 
 
 A lista mostra visitas e simulações em aberto, com as escolhas registradas, o dispositivo e a região aproximada da última atividade. Depois do envio, a equipe acompanha a proposta na aba Solicitações.
 
+No mesmo filtro de mês, o calendário conta os navegadores distintos com atividade em cada dia. Em Métricas, os dias de maior movimento usam essa mesma contagem. O movimento por horário soma os navegadores ativos em cada faixa de uma hora ao longo dos dias do mês, pelo horário de Brasília. Um navegador que retorna em outro dia entra na contagem daquele dia. Os meses anteriores ao início da medição detalhada, assim como o mês em que ela foi ativada, podem ter cobertura parcial. Para esses períodos, o painel recupera apenas os horários presentes nos registros anteriores.
+
+A aba **Atividade do simulador** abre no calendário. Em **Acessos por dia**, o botão no canto superior direito gira o card para mostrar o gráfico de barras verticais. Cada barra representa os navegadores distintos de um dia. O mesmo botão volta ao calendário. No mês em andamento, o gráfico vai até a data da consulta. Dias sem histórico suficiente aparecem com um traço.
+
 A região aproximada usa a base brasileira por estado empacotada em `customer-service/geo/`. A consulta é local e o painel guarda somente a região encontrada e a categoria do dispositivo. Acessos fora da cobertura, em rede local ou através de um proxy de origem incerta aparecem com região indisponível. Se a hospedagem usa proxy, a TI pode habilitar `activityRemoteAddrVerified` depois de validar que o servidor já restaurou o IP do visitante em `REMOTE_ADDR` apenas a partir de proxies confiáveis.
 
 O pacote PHP, gerado por `scripts/package-customer-service.mjs`, ativa a integração da página com a API na mesma origem. O serviço valida os dados, recalcula a estimativa pela data do servidor e registra um protocolo. Os valores recebidos do navegador não são aceitos como autoridade. O painel `contatos/` exige senha validada pelo PHP e permite marcar encaminhamento, escrever uma observação de até 160 caracteres e filtrar os registros.

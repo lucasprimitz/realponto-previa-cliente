@@ -16,6 +16,8 @@ const nextButton = $('#next-page');
 const state = {authenticated: false, csrfToken: '', page: 1, totalPages: 1, busy: false, generation: 0, lastActivity: 0, view: 'requests'};
 const activityPagination = {page: 1, totalPages: 1};
 const activityMonth = $('#activity-month');
+const dailyViewToggle = $('#calendar-chart-toggle');
+let dailyFlip = null;
 const monthFormat = new Intl.DateTimeFormat('pt-BR', {year: 'numeric', month: 'long', timeZone: 'UTC'});
 const views = {
   requests: ['Solicitações recebidas', 'Organize os contatos, confira o investimento e encaminhe cada solicitação.'],
@@ -68,6 +70,7 @@ function clearPrivateView() {
   list.replaceChildren();
   activityMonth.replaceChildren();
   clearSimulationActivity();
+  setActivityMode('calendar');
   $('#report-metrics').replaceChildren();
   $('#report-rows').replaceChildren();
   $('#report-total').replaceChildren();
@@ -425,6 +428,7 @@ $('#confirm-archive').addEventListener('click', async () => {
 });
 function setView(view) {
   state.view = view;
+  if (view === 'activity') setActivityMode('calendar');
   for (const name of viewNames) {
     const selected = name === view;
     const tab = $('#' + name + '-tab');
@@ -456,6 +460,9 @@ function clearSimulationActivity() {
   $('#activity-devices').hidden = true;
   $('#activity-mobile-total').textContent = '';
   $('#activity-desktop-total').textContent = '';
+  $('#calendar-content').replaceChildren();
+  dailyViewToggle.disabled = true;
+  $('#traffic-content').replaceChildren();
 }
 
 const activitySteps = ['Seu sistema', 'Quantidades', 'Rotina de ponto', 'Sua proposta'];
@@ -576,6 +583,285 @@ function renderDeviceSummary(visitorsByDevice) {
   section.hidden = false;
 }
 
+const activityPanels = {list: '#activity-list-view', calendar: '#activity-calendar', traffic: '#activity-traffic'};
+function setActivityMode(mode) {
+  resetDailyCard();
+  for (const [name, selector] of Object.entries(activityPanels)) {
+    const selected = name === mode;
+    $('#activity-mode-' + name).setAttribute('aria-pressed', String(selected));
+    $(selector).hidden = !selected;
+  }
+}
+
+const trafficZone = 'America/Sao_Paulo';
+const localDay = new Intl.DateTimeFormat('sv-SE', {timeZone: trafficZone, year: 'numeric', month: '2-digit', day: '2-digit'});
+const localTimestamp = new Intl.DateTimeFormat('pt-BR', {timeZone: trafficZone, dateStyle: 'short', timeStyle: 'short'});
+const localClock = new Intl.DateTimeFormat('pt-BR', {timeZone: trafficZone, hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit'});
+const weekdays = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+const hourLabel = hour => String(hour).padStart(2, '0') + 'h';
+const browserCount = n => n.toLocaleString('pt-BR') + (n === 1 ? ' navegador' : ' navegadores');
+
+function trafficStatus(message) {
+  resetDailyCard();
+  dailyViewToggle.disabled = true;
+  for (const selector of ['#calendar-content', '#traffic-content']) {
+    $(selector).replaceChildren(textElement('p', 'traffic-message', message));
+  }
+}
+
+function missingDailyCount(date, browsers, traffic, today, startDay, partialStartDay) {
+  if (date > today) return 'Dia futuro';
+  const incomplete = traffic.partialHistory && (date < startDay || (date === startDay && partialStartDay));
+  return incomplete && browsers === 0 ? 'Histórico incompleto' : '';
+}
+
+function chartSvg(name, attributes) {
+  const element = document.createElementNS('http://www.w3.org/2000/svg', name);
+  for (const [attribute, value] of Object.entries(attributes)) element.setAttribute(attribute, value);
+  return element;
+}
+
+function renderDailyBarChart(month, traffic, today, startDay, partialStartDay) {
+  const days = traffic.days.filter(day => day.date <= today);
+  const figure = textElement('figure', 'daily-bar-chart', '');
+  const monthName = monthFormat.format(new Date(month + '-01T00:00:00Z'));
+  figure.append(textElement('figcaption', '', monthName));
+  if (!days.length) {
+    figure.append(textElement('p', 'traffic-message', 'Ainda não há dias para exibir neste mês.'));
+    return figure;
+  }
+
+  const max = Math.max(...days.map(day => day.browsers));
+  const limit = max <= 1 ? 1 : 2 * Math.ceil(max / 2);
+  const ticks = limit === 1 ? [0, 1] : [0, limit / 2, limit];
+  const compact = new Intl.NumberFormat('pt-BR', {notation: 'compact', maximumFractionDigits: 1});
+  const labelFor = n => n < 1000 ? String(n) : compact.format(n);
+  // Coordinates are percentages of the plot; text and corner radii stay in pixels.
+  const baseline = 97;
+  const barHeight = value => 85 * value / limit;
+
+  const frame = textElement('div', 'daily-bar-frame', '');
+  frame.append(textElement('span', 'daily-bar-axis-name', 'Navegadores'));
+  const layout = textElement('div', 'daily-bar-layout', '');
+  const axis = chartSvg('svg', {class: 'daily-bar-axis', 'aria-hidden': 'true'});
+  const guides = chartSvg('svg', {class: 'daily-bar-guides', 'aria-hidden': 'true'});
+  for (const n of ticks) {
+    const y = (baseline - barHeight(n)) + '%';
+    const label = chartSvg('text', {x: '92%', y, dy: 4, 'text-anchor': 'end'});
+    label.textContent = labelFor(n);
+    axis.append(label);
+    guides.append(chartSvg('line', {class: n ? 'guide' : 'baseline', x1: 0, x2: '100%', y1: y, y2: y}));
+  }
+
+  const scroll = textElement('div', 'daily-bar-scroll', '');
+  scroll.tabIndex = 0;
+  scroll.setAttribute('role', 'region');
+  scroll.setAttribute('aria-label', 'Acessos por dia em ' + monthName);
+  const canvas = textElement('div', 'daily-bar-canvas', '');
+  const series = textElement('ol', 'daily-bar-series', '');
+  if (max >= 1000) series.classList.add('large-counts');
+  for (const {date, browsers} of days) {
+    const missing = missingDailyCount(date, browsers, traffic, today, startDay, partialStartDay);
+    const peak = !missing && browsers > 0 && browsers === max;
+    const day = textElement('li', 'daily-bar-day', '');
+    day.dataset.date = date;
+    day.dataset.weekday = new Date(date + 'T00:00:00Z').getUTCDay();
+    day.classList.toggle('unavailable', Boolean(missing));
+    day.classList.toggle('peak', peak);
+    const detail = date.slice(-2) + '/' + date.slice(5, 7) + ' · ' + (missing || browserCount(browsers)) +
+      (peak ? ' · Maior movimento no mês' : '');
+    day.title = detail;
+    const plot = chartSvg('svg', {class: 'daily-bar-mark', 'aria-hidden': 'true'});
+    const height = missing ? 0 : barHeight(browsers);
+    const y = (baseline - height) + '%';
+    if (!missing) {
+      day.dataset.browsers = browsers;
+      plot.append(chartSvg('rect', {class: 'daily-bar', 'data-browsers': browsers, x: '25%', width: '50%', y, height: height + '%', rx: 3}));
+    }
+    const value = chartSvg('text', {class: 'daily-bar-value', x: '50%', y, dy: -6, 'text-anchor': 'middle'});
+    value.textContent = missing ? '—' : labelFor(browsers);
+    plot.append(value);
+    const time = textElement('time', '', date.slice(-2));
+    time.dateTime = date;
+    time.setAttribute('aria-hidden', 'true');
+    if (date === today) time.setAttribute('aria-current', 'date');
+    day.append(plot, time, textElement('span', 'sr-only', detail));
+    series.append(day);
+  }
+
+  canvas.append(guides, series);
+  layout.append(axis, canvas);
+  scroll.append(layout);
+  frame.append(scroll, textElement('p', 'daily-bar-day-axis', 'Dia do mês'));
+  figure.append(frame);
+  return figure;
+}
+
+function renderCalendar(month, traffic, today, startDay, partialStartDay) {
+  const first = new Date(month + '-01T00:00:00Z');
+  const table = document.createElement('table');
+  table.className = 'activity-calendar-table';
+  table.createCaption().textContent = monthFormat.format(first);
+  const header = table.createTHead().insertRow();
+  for (const weekday of weekdays) {
+    const th = textElement('th', '', weekday.slice(0, 3));
+    th.scope = 'col';
+    th.abbr = weekday;
+    header.append(th);
+  }
+  const body = table.createTBody();
+  let row = body.insertRow();
+  for (let offset = 0; offset < first.getUTCDay(); offset++) row.insertCell();
+  const max = Math.max(...traffic.days.map(day => day.browsers));
+  for (const {date, browsers} of traffic.days) {
+    if (row.cells.length === 7) row = body.insertRow();
+    const cell = row.insertCell();
+    const time = textElement('time', '', String(Number(date.slice(-2))));
+    time.dateTime = date;
+    const missing = missingDailyCount(date, browsers, traffic, today, startDay, partialStartDay);
+    const unavailable = Boolean(missing);
+    const count = textElement('strong', 'calendar-count', unavailable ? '—' : browsers.toLocaleString('pt-BR'));
+    const cellBox = textElement('div', 'calendar-day', '');
+    if (date === today) time.setAttribute('aria-current', 'date');
+    if (unavailable) cellBox.classList.add('unavailable');
+    else if (browsers > 0) cellBox.classList.add(browsers === max ? 'peak' : 'visited');
+    const description = missing || browserCount(browsers);
+    count.setAttribute('aria-hidden', 'true');
+    const detail = cellBox.classList.contains('peak') ? description + '. Maior movimento no mês.' : description;
+    cellBox.append(time, count, textElement('span', 'sr-only', detail));
+    cell.append(cellBox);
+  }
+  while (row.cells.length < 7) row.insertCell();
+  const legend = textElement('div', 'calendar-legend', '');
+  for (const [className, label] of [['visited', 'Com acessos'], ['peak', 'Maior movimento']]) {
+    const item = textElement('span', 'calendar-key ' + className, label);
+    legend.append(item);
+  }
+  legend.append(textElement('span', '', '— Dia futuro ou sem histórico completo'));
+  return [table, legend];
+}
+
+function renderTrafficMetrics(traffic, today) {
+  const days = traffic.days.filter(day => day.date <= today);
+  const dayPeak = Math.max(0, ...days.map(day => day.browsers));
+  const hourPeak = Math.max(...traffic.hours);
+  if (!dayPeak && !hourPeak) {
+    const empty = traffic.partialHistory ? 'Nenhum acesso consta nos registros disponíveis para este mês.' : 'Nenhum acesso registrado neste mês.';
+    return [textElement('p', 'traffic-message', empty)];
+  }
+  const peaks = textElement('div', 'traffic-peaks', '');
+  const dates = days.filter(day => day.browsers === dayPeak).map(day => day.date.slice(-2) + '/' + day.date.slice(5, 7));
+  const hours = traffic.hours.flatMap((value, hour) => value === hourPeak ? [hourLabel(hour)] : []);
+  for (const [title, maximum, labels, description] of [
+    ['Dias com maior acesso', dayPeak, dates, browserCount(dayPeak) + ' por dia de pico'],
+    ['Horários com maior acesso', hourPeak, hours, hourPeak.toLocaleString('pt-BR') + (hourPeak === 1 ? ' acesso' : ' acessos') + ' por horário de pico no mês'],
+  ]) {
+    const card = textElement('div', 'traffic-peak', '');
+    card.append(textElement('h3', '', title),
+      textElement('strong', '', maximum ? labels.join(' · ') : '—'),
+      textElement('p', '', maximum ? description : 'Sem registros'));
+    peaks.append(card);
+  }
+  const chart = textElement('div', 'traffic-chart', '');
+  chart.append(textElement('h3', '', 'Distribuição por hora'),
+    textElement('p', 'hint', 'Em cada faixa de uma hora, contamos cada navegador uma vez por dia e somamos os dias do mês.'));
+  const bars = textElement('ol', 'traffic-bars', '');
+  for (const [hour, count] of traffic.hours.entries()) {
+    const item = textElement('li', count === hourPeak && count > 0 ? 'peak' : '', '');
+    const bar = document.createElement('progress');
+    bar.max = hourPeak || 1;
+    bar.value = count;
+    bar.setAttribute('aria-hidden', 'true');
+    item.append(textElement('span', '', hourLabel(hour)), bar, textElement('strong', '', count.toLocaleString('pt-BR')));
+    bars.append(item);
+  }
+  chart.append(bars);
+  return [peaks, chart];
+}
+
+function renderTraffic(month, traffic) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  const length = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  const count = n => Number.isSafeInteger(n) && n >= 0;
+  const started = new Date(traffic?.trackingStartedAt);
+  const asOf = new Date(traffic?.asOf);
+  if (traffic?.timeZone !== trafficZone || typeof traffic.trackingStartedAt !== 'string' || !Number.isFinite(started.getTime()) ||
+      typeof traffic.asOf !== 'string' || !Number.isFinite(asOf.getTime()) ||
+      typeof traffic.partialHistory !== 'boolean' || !Array.isArray(traffic.days) || traffic.days.length !== length ||
+      !traffic.days.every((day, i) => day?.date === month + '-' + String(i + 1).padStart(2, '0') && count(day.browsers)) ||
+      !Array.isArray(traffic.hours) || traffic.hours.length !== 24 || !traffic.hours.every(count)) {
+    trafficStatus('Os dados por dia e horário estão indisponíveis para este mês.');
+    return;
+  }
+  const today = localDay.format(asOf);
+  const startDay = localDay.format(started);
+  const calendar = $('#calendar-content');
+  const metrics = $('#traffic-content');
+  const partialStartDay = localClock.format(started) !== '00:00:00';
+  const gridFace = document.createElement('div');
+  gridFace.id = 'calendar-grid';
+  gridFace.append(...renderCalendar(month, traffic, today, startDay, partialStartDay));
+  const chartFace = document.createElement('div');
+  chartFace.id = 'calendar-chart';
+  chartFace.append(renderDailyBarChart(month, traffic, today, startDay, partialStartDay));
+  const faces = document.createElement('div');
+  faces.className = 'daily-card-faces';
+  faces.append(gridFace, chartFace);
+  calendar.replaceChildren(faces);
+  dailyViewToggle.disabled = false;
+  setDailyFace(false);
+  metrics.replaceChildren(...renderTrafficMetrics(traffic, today));
+  if (month === today.slice(0, 7)) {
+    const cutoff = 'Mês em andamento. Contagem até ' + localTimestamp.format(asOf) + '.';
+    for (const section of [calendar, metrics]) section.append(textElement('p', 'traffic-cutoff', cutoff));
+  }
+  if (traffic.partialHistory) {
+    const note = 'Histórico parcial. A contagem por dia e hora começou em ' + localTimestamp.format(started) + '. Para o período anterior, só estão disponíveis os acessos que puderam ser recuperados.';
+    for (const section of [calendar, metrics]) section.prepend(textElement('p', 'traffic-coverage', note));
+  }
+}
+
+function setDailyFace(showChart) {
+  const grid = $('#calendar-grid');
+  const chart = $('#calendar-chart');
+  if (grid && chart) {
+    grid.inert = showChart;
+    chart.hidden = !showChart;
+  }
+  const action = showChart ? 'Voltar ao calendário' : 'Ver gráfico de barras';
+  dailyViewToggle.setAttribute('aria-label', action);
+  dailyViewToggle.title = action;
+  dailyViewToggle.classList.toggle('shows-chart', showChart);
+}
+
+function resetDailyCard() {
+  dailyFlip?.cancel();
+  dailyFlip = null;
+  setDailyFace(false);
+}
+
+function flipDailyCard() {
+  if (dailyFlip || dailyViewToggle.disabled) return;
+  const card = $('#activity-calendar');
+  const showChart = $('#calendar-chart').hidden;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !card.animate) {
+    setDailyFace(showChart);
+    return;
+  }
+  const edge = showChart ? -90 : 90;
+  const rotation = angle => ({transform: 'perspective(1400px) rotateY(' + angle + 'deg)'});
+  const outgoing = card.animate([rotation(0), rotation(edge)], {duration: 240, easing: 'ease-in', fill: 'forwards'});
+  dailyFlip = outgoing;
+  outgoing.onfinish = () => {
+    if (dailyFlip !== outgoing) return;
+    setDailyFace(showChart);
+    const incoming = card.animate([rotation(-edge), rotation(0)], {duration: 240, easing: 'ease-out'});
+    dailyFlip = incoming;
+    outgoing.cancel();
+    incoming.onfinish = () => { if (dailyFlip === incoming) dailyFlip = null; };
+  };
+}
+
 function renderSimulationActivity(result) {
   const stats = result.summary;
   const metricNames = ['browsers', 'started', 'viewed'];
@@ -592,6 +878,7 @@ function renderSimulationActivity(result) {
     reportMetric('Orçamento visualizado', number(stats.viewed), 'Simulações que chegaram ao orçamento.')
   );
   renderDeviceSummary(stats.visitorsByDevice);
+  renderTraffic(result.month, result.traffic);
   $('#activity-list').replaceChildren(...items);
   $('#activity-empty').hidden = result.total !== 0;
   activityPagination.page = result.page;
@@ -611,6 +898,7 @@ async function loadSimulationActivity(page) {
   const month = activityMonth.value;
   const monthQuery = month ? '&month=' + encodeURIComponent(month) : '';
   $('#activity-status').textContent = 'Carregando atividade…';
+  trafficStatus('Carregando acessos do mês…');
   const generation = ++state.generation;
   try {
     let result = await api('activity.php?page=' + page + monthQuery);
@@ -626,6 +914,7 @@ async function loadSimulationActivity(page) {
     if (generation !== state.generation || expired(error)) return;
     clearSimulationActivity();
     $('#activity-status').textContent = 'Não foi possível carregar as atividades.';
+    trafficStatus('Não foi possível carregar os acessos. Use Atualizar atividade para tentar novamente.');
     notice(error.message, 'error');
   } finally {
     if (generation === state.generation) controlsBusy(false);
@@ -781,6 +1070,10 @@ for (const view of viewNames) {
     nextTab.click();
   });
 }
+for (const mode of Object.keys(activityPanels)) {
+  $('#activity-mode-' + mode).addEventListener('click', () => setActivityMode(mode));
+}
+dailyViewToggle.addEventListener('click', flipDailyCard);
 activityMonth.addEventListener('change', () => { clearSimulationActivity(); void loadSimulationActivity(1); });
 $('#refresh-activity').addEventListener('click', () => { void loadSimulationActivity(1); });
 $('#activity-previous').addEventListener('click', () => { if (activityPagination.page > 1) void loadSimulationActivity(activityPagination.page - 1); });

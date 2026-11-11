@@ -290,8 +290,40 @@ $legacyStore->archive(['id' => $legacyRow['id'], 'version' => 2, 'archived' => t
 $legacyStore = null;
 $legacyStore = new Store($legacyConfig);
 check($legacyStore->listing(1, 'all')['total'] === 0 && $legacyStore->listing(1, 'archived')['total'] === 1 && $legacyStore->reports(2031)['total']['count'] === 0, 'Reabertura não reativa registros nem repete colunas da migração.');
-$legacyStore = null; $archiveStore = null; gc_collect_cycles();
-foreach ([$archiveSettings['dataDirectory'], $legacySettings['dataDirectory']] as $directory) {
+
+// Cada envio tem seu próprio rascunho, mas a mesma pessoa pode enviar várias propostas e voltar em outro dia.
+$trafficConfig = new Config(array_replace($settings, ['dataDirectory' => $testDirectory . '/traffic']));
+$trafficStore = new Store($trafficConfig);
+$visits = [
+    ['2024-02-28T12:00:00Z', 1], ['2024-02-28T12:50:00Z', 1], ['2024-02-28T13:05:00Z', 1],
+    ['2024-02-29T12:20:00Z', 1], ['2024-02-29T12:30:00Z', 2], ['2024-03-01T02:59:59Z', 1],
+    ['2024-03-01T03:00:00Z', 2],
+];
+foreach ($visits as $index => [$receivedAt, $browser]) {
+    $sample = array_replace($request, ['createdAt' => $receivedAt]);
+    $identity = $trafficStore->activity->identity([
+        'browserId' => sprintf('00000000-0000-4000-8000-%012d', $browser),
+        'simulationId' => sprintf('00000000-0000-4000-8001-%012d', $index),
+    ]);
+    $key = 'traffic-fixture-request-' . $index;
+    $trafficStore->create($sample, $key, $identity);
+    $trafficStore->create($sample, $key, $identity);
+}
+$february = $trafficStore->activity->listing(1, '2024-02');
+check($february['total'] === 0 && $february['summary']['browsers'] === 2, 'Envios entram no total mensal de navegadores e saem das simulações em aberto.');
+$expectedDays = [];
+for ($day = 1; $day <= 29; $day++) {
+    $expectedDays[] = ['date' => sprintf('2024-02-%02d', $day), 'browsers' => [28 => 1, 29 => 2][$day] ?? 0];
+}
+check($february['traffic']['days'] === $expectedDays, 'No mês bissexto, cada navegador conta uma vez por dia mesmo com várias horas, rascunhos e reenvios.');
+$expectedHours = array_replace(array_fill(0, 24, 0), [9 => 3, 10 => 1, 23 => 1]);
+check($february['traffic']['hours'] === $expectedHours, 'O pico soma navegadores distintos em cada dia das 9h às 9h59, incluindo dias diferentes.');
+$march = $trafficStore->activity->listing(1, '2024-03')['traffic'];
+check($march['days'][0] === ['date' => '2024-03-01', 'browsers' => 1] && $march['hours'] === array_replace(array_fill(0, 24, 0), [0 => 1]), 'A virada do mês segue a meia-noite local.');
+$firstFullMonth = (new DateTimeImmutable($march['trackingStartedAt']))->setTimezone(new DateTimeZone($march['timeZone']))->modify('first day of next month')->format('Y-m');
+check(!$trafficStore->activity->listing(1, $firstFullMonth)['traffic']['partialHistory'], 'Meses inteiros após o início da coleta têm cobertura detalhada.');
+$trafficStore = null; $legacyStore = null; $archiveStore = null; gc_collect_cycles();
+foreach ([$archiveSettings['dataDirectory'], $legacySettings['dataDirectory'], $trafficConfig->get('dataDirectory')] as $directory) {
     foreach (['contacts.sqlite', 'contacts.sqlite-wal', 'contacts.sqlite-shm'] as $name) @unlink($directory . '/' . $name);
     @rmdir($directory);
 }

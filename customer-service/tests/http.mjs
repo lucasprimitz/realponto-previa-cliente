@@ -60,7 +60,9 @@ async function checkActivity(customer, admin, original, reportYear) {
     assert.doesNotMatch(json,/"(?:browserId|simulationId|contact|name|company|taxId|cpf|cnpj|email|phone|ip|userAgent)"|Teste HTTP|Empresa Exemplo|teste@example\.invalid|11999999999/i);
     checks++;
   }
-  check((await customer.call('activity.php')).status,401,'Leitura de atividade exige senha');
+  const restricted = await customer.call('activity.php');
+  check(restricted.status,401,'Leitura de atividade exige senha');
+  check('traffic' in restricted.body,false,'O calendário e os horários de acesso são restritos à equipe');
   check((await save(initial,{omitCsrf:true})).status,403,'Registro de atividade exige CSRF');
   check((await save(initial,{omitOrigin:true})).status,403,'Registro de atividade exige origem');
   check((await save(initial,{headers:{Origin:'https://evil.example.invalid'}})).status,403,'Atividade rejeita origem externa');
@@ -77,6 +79,8 @@ async function checkActivity(customer, admin, original, reportYear) {
   await saved(initial, {...deviceHeaders.mobile, 'CF-Region-Code':'SP', 'CF-IPCountry':'BR', 'X-Forwarded-For':'1.1.1.1'});
   const access = await list();
   check(access.summary.browsers,1,'Abertura registra um navegador');
+  check(access.traffic.days.filter(day=>day.browsers > 0).map(day=>day.browsers),[1],'A primeira abertura aparece no calendário, sem proposta');
+  check(access.traffic.hours.filter(count=>count > 0),[1],'A primeira abertura aparece no horário da visita');
   check(access.items[0].device,'mobile','Categoria móvel é calculada no servidor');
   check(access.items[0].region,null,'Acesso local ignora cabeçalhos de localização enviados pelo visitante');
   check(access.summary.visitorsByDevice,{mobile:1,desktop:0},'A primeira visita basta para contar o celular; um envio sem identificador não inventa uma visita em computador');
@@ -198,7 +202,8 @@ async function seedLegacyActivity() {
     $db->beginTransaction();
     for ($i = 0; $i < 25; $i++) {
         $instant = sprintf('2020-08-10T12:%02d:00Z', $i);
-        $insert->execute(['draft-fixture-' . $i, $browser, $instant, $instant, 1, 1, 0, '{}']);
+        $first = $i === 0 ? '2020-08-07T12:30:00Z' : $instant;
+        $insert->execute(['draft-fixture-' . $i, $browser, $first, $instant, 1, 1, 0, '{}']);
     }
     $before = '2020-09-01T02:59:59Z';
     $after = '2020-09-01T03:00:00Z';
@@ -235,9 +240,22 @@ async function checkMonthlyActivity(customer, admin) {
   check(august.items.length,25,'Primeira página histórica limitada a 25 simulações');
   check(august.summary,{browsers:1,started:1,viewed:0,visitorsByDevice:zeroVisitors},'Indicadores mensais deduplicam o navegador histórico sem inferir aparelho');
   check(august.items[0].lastActivityAt,'2020-09-01T02:59:59Z','23h59m59 em São Paulo pertence a agosto');
+  check(august.traffic.timeZone,'America/Sao_Paulo','Calendário usa o fuso do painel');
+  check(Number.isFinite(Date.parse(august.traffic.trackingStartedAt)),true,'Início da coleta detalhada disponível para a equipe');
+  check(august.traffic.partialHistory,true,'O período anterior à coleta detalhada é identificado');
+  check(august.traffic.days.length,31,'O calendário inclui todos os dias de agosto');
+  check(august.traffic.days.filter(day=>day.browsers > 0),[
+    {date:'2020-08-07',browsers:1}, {date:'2020-08-10',browsers:1}, {date:'2020-08-31',browsers:1}
+  ],'O histórico só recupera datas observadas, sem inventar visitas entre a abertura e a retomada');
+  const augustHours = Array(24).fill(0);
+  augustHours[9] = 2;
+  augustHours[23] = 1;
+  check(august.traffic.hours,augustHours,'O histórico deduplica por navegador e faixa horária de cada dia');
   const pageTwo = await listing('2020-08',2);
   check(pageTwo.items.length,1,'Último registro disponível na segunda página');
   check(pageTwo.summary,august.summary,'Totais mensais independentes da página');
+  check(pageTwo.traffic.days,august.traffic.days,'Paginação e reabertura do painel preservam as datas do calendário');
+  check(pageTwo.traffic.trackingStartedAt,august.traffic.trackingStartedAt,'A reabertura do painel preserva o início da coleta detalhada');
   check(new Set([...august.items,...pageTwo.items].map(item=>item.lastActivityAt)).size,26,'Paginação sem sobreposição');
   const september = await listing('2020-09');
   check(september.total,1,'Mês seguinte começa exatamente à meia-noite em São Paulo');
@@ -245,6 +263,8 @@ async function checkMonthlyActivity(customer, admin) {
   const empty = await listing('2020-10');
   check(empty.items,[],'Mês intermediário sem registros pode ser consultado');
   check(empty.summary,{browsers:0,started:0,viewed:0,visitorsByDevice:zeroVisitors},'Mês vazio apresenta totais zerados');
+  check(empty.traffic.days.map(day=>day.browsers),Array(31).fill(0),'Um mês sem visitas tem zero em todos os dias');
+  check(empty.traffic.hours,Array(24).fill(0),'Um mês sem visitas tem zero em todos os horários');
 
   const justReturned = await customer.call('activity.php',{method:'POST',data:{
     ...returningVisitor, revision:2, step:2, estimateViewed:false, configuration:{system:'rhid'}
@@ -276,6 +296,8 @@ async function checkMonthlyActivity(customer, admin) {
   check(previous.items,[...august.items.slice(1),...pageTwo.items],'A primeira página é preenchida pelos 25 rascunhos ainda abertos do mesmo navegador');
   check((await listing('2020-08',2)).items,[],'Segunda página fica vazia após a retirada do rascunho enviado');
   check(previous.summary,august.summary,'Retomada e envio não alteram os indicadores do mês anterior');
+  check(previous.traffic.days,august.traffic.days,'O envio posterior mantém as visitas históricas no calendário');
+  check(previous.traffic.hours,august.traffic.hours,'O envio posterior mantém os horários historicamente observados');
 }
 
 const request={schemaVersion:1,createdAt:'1900-01-01',contact:{name:'Teste HTTP',company:'Empresa Exemplo',email:'teste@example.invalid',phone:'11999999999',taxId:null},configuration:{system:'iponto',schedules:10,employees:40,bankHours:true,workScale:false},payment:{method:'pix',label:'fake'},estimate:{totalCents:1},consent:true};
