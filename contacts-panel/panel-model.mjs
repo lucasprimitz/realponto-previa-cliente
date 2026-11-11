@@ -2,7 +2,7 @@ const currency = new Intl.NumberFormat('pt-BR', {style: 'currency', currency: 'B
 const integer = new Intl.NumberFormat('pt-BR');
 const dateTime = new Intl.DateTimeFormat('pt-BR', {dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo'});
 const SYSTEMS = Object.freeze({'secullum-offline': 'Secullum Offline', 'secullum-rh': 'Secullum RH', rhid: 'RHID', iponto: 'iPonto'});
-const PAYMENTS = Object.freeze({pix: 'Pix', boleto: 'Boleto em 6 parcelas', 'credit-card': 'Cartão de crédito em 10 parcelas'});
+export const PAYMENTS = Object.freeze({pix: 'Pix', boleto: 'Boleto em até 6x, sob consulta', 'credit-card': 'Cartão de crédito em até 10x sem juros'});
 
 const object = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const validCents = value => Number.isSafeInteger(value) && value >= 0;
@@ -17,6 +17,10 @@ export function safeText(value, fallback = 'Não informado') {
 
 export function amount(cents) {
   return validCents(cents) ? currency.format(cents / 100) : 'Valor sob consulta';
+}
+
+export function installmentExample(count, cents) {
+  return validCents(cents) ? `Exemplo: ${count}x de ${amount(cents)}` : 'Valor sob consulta';
 }
 
 export function receivedDate(value) {
@@ -75,12 +79,12 @@ export function selectedPayment(itemOrRequest) {
   let caption = 'Condições a confirmar na proposta.';
   if (method === 'pix') caption = 'À vista · desconto extra do Pix já considerado.';
   if (method === 'boleto') {
-    if (totalCents !== null && validCents(estimate.boletoInstallmentCents)) value = '6x de ' + amount(estimate.boletoInstallmentCents);
-    caption = 'Sob consulta e análise do cliente.';
+    if (totalCents !== null && validCents(estimate.boletoInstallmentCents)) value = installmentExample(6, estimate.boletoInstallmentCents);
+    caption = 'Disponibilidade sujeita à análise do cliente.';
   }
   if (method === 'credit-card') {
-    if (totalCents !== null && validCents(estimate.cardInstallmentCents)) value = '10x de ' + amount(estimate.cardInstallmentCents);
-    caption = 'Sem juros · parcelas aproximadas.';
+    if (totalCents !== null && validCents(estimate.cardInstallmentCents)) value = installmentExample(10, estimate.cardInstallmentCents);
+    caption = 'Parcelas aproximadas por arredondamento.';
   }
   if (totalCents === null) caption = method === 'boleto' ? 'Valor e parcelamento sob consulta.' : 'Valor e condições a confirmar na proposta.';
   return {label, value, caption, totalCents};
@@ -143,8 +147,8 @@ export function buildRequestText(value) {
     '',
     'OPÇÕES DE PAGAMENTO PARA CONFERÊNCIA',
     'Pix: ' + amount(estimate.pixCents) + ' à vista.',
-    'Boleto: ' + (validCents(estimate.totalCents) && validCents(estimate.boletoInstallmentCents) ? '6x de ' + amount(estimate.boletoInstallmentCents) : 'Valor sob consulta') + ' — sob consulta e análise do cliente.',
-    'Cartão de crédito: ' + (validCents(estimate.totalCents) && validCents(estimate.cardInstallmentCents) ? '10x de ' + amount(estimate.cardInstallmentCents) : 'Valor sob consulta') + ' — sem juros.',
+    PAYMENTS.boleto + ' — ' + installmentExample(6, validCents(estimate.totalCents) ? estimate.boletoInstallmentCents : null),
+    PAYMENTS['credit-card'] + ' — ' + installmentExample(10, validCents(estimate.totalCents) ? estimate.cardInstallmentCents : null),
     'Parcelas aproximadas por arredondamento; condições a confirmar na proposta.',
     '',
   );

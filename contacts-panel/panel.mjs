@@ -1,4 +1,4 @@
-import {safeText, amount, receivedDate, quantity, formatPhone, formatTaxId, systemLabel, selectedPayment, buildRequestText} from './panel-model.mjs';
+import {safeText, amount, receivedDate, quantity, formatPhone, formatTaxId, systemLabel, selectedPayment, buildRequestText, PAYMENTS, installmentExample} from './panel-model.mjs';
 const $ = selector => document.querySelector(selector);
 const list = $('#requests-list');
 const loginPanel = $('#login-panel');
@@ -234,8 +234,8 @@ function renderItem(item) {
     addDetail(values.dl, 'Economia da campanha', amount(estimate.discountCents));
   }
   addDetail(values.dl, 'Pix', amount(estimate.pixCents));
-  addDetail(values.dl, 'Boleto · sob consulta', Number.isSafeInteger(estimate.boletoInstallmentCents) ? '6x de ' + amount(estimate.boletoInstallmentCents) : 'Valor sob consulta');
-  addDetail(values.dl, 'Cartão · sem juros', Number.isSafeInteger(estimate.cardInstallmentCents) ? '10x de ' + amount(estimate.cardInstallmentCents) : 'Valor sob consulta');
+  addDetail(values.dl, PAYMENTS.boleto, installmentExample(6, estimate.boletoInstallmentCents));
+  addDetail(values.dl, PAYMENTS['credit-card'], installmentExample(10, estimate.cardInstallmentCents));
   details.append(scope.container, values.container);
   back.append(backTop, details);
   function flipCard(flipped) {

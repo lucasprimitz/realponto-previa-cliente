@@ -2,8 +2,8 @@ import {calculateCustomerQuote} from './customer-model.mjs';
 
 export const PAYMENT_METHODS = Object.freeze([
   Object.freeze({id: 'pix', label: 'Pix — 5% de desconto'}),
-  Object.freeze({id: 'boleto', label: 'Boleto em 6 parcelas — sob consulta'}),
-  Object.freeze({id: 'credit-card', label: 'Cartão de crédito em 10 parcelas sem juros'}),
+  Object.freeze({id: 'boleto', label: 'Boleto em até 6 parcelas — sob consulta'}),
+  Object.freeze({id: 'credit-card', label: 'Cartão de crédito em até 10 parcelas sem juros'}),
 ]);
 
 export function normalizeTaxId(value) {

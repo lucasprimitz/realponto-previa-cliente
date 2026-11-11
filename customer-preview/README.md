@@ -12,7 +12,7 @@ Com Node.js disponível, executar `node customer-preview/server.mjs` a partir da
 - Sistemas Secullum Offline, Secullum RH, RHID e iPonto. Os dois Secullum usam o adicional vigente sem detalhá-lo na interface do cliente.
 - Investimento exibido somente ao avançar da etapa 3 para a etapa 4. Resumo da configuração aberto por padrão e escopo do serviço visível.
 - Inativação dos horários antigos incluída para Secullum RH, RHID e iPonto; item oculto para Secullum Offline.
-- Pagamento em cards: Pix com 5% de desconto adicional; boleto em 6 parcelas sob consulta; cartão de crédito em 10 parcelas sem juros. As parcelas são arredondadas somente para apresentação.
+- Os cards mostram Pix com 5% de desconto adicional, boleto em até 6 parcelas sob consulta e cartão de crédito em até 10 parcelas sem juros. Os valores ilustram o prazo máximo de cada opção e são arredondados somente para apresentação.
 - CPF/CNPJ opcional e preferência de pagamento obrigatória, enviados junto aos contatos, escopo, consentimento e estimativa.
 - Quantidades acima dos pacotes geram consulta personalizada, sem inventar preço.
 - Layout responsivo, navegação por teclado e informações para leitores de tela.

@@ -65,13 +65,15 @@ test('selected Pix uses stored net price without recalculating historical prices
 
 test('installments preserve saved rounded amounts and aggregate only the saved total', () => {
   const boleto = selectedPayment(item('boleto'));
-  assert.equal(boleto.value, '6x de ' + amount(14040));
+  assert.equal(boleto.label, 'Boleto em até 6x, sob consulta');
+  assert.equal(boleto.value, 'Exemplo: 6x de ' + amount(14040));
   assert.equal(boleto.totalCents, 84238);
-  assert.match(boleto.caption, /Sob consulta/);
+  assert.match(boleto.caption, /análise do cliente/);
   const card = selectedPayment(item('credit-card'));
-  assert.equal(card.value, '10x de ' + amount(8424));
+  assert.equal(card.label, 'Cartão de crédito em até 10x sem juros');
+  assert.equal(card.value, 'Exemplo: 10x de ' + amount(8424));
   assert.equal(card.totalCents, 84238);
-  assert.match(card.caption, /Sem juros/);
+  assert.match(card.caption, /aproximadas/);
 });
 
 test('zero-value estimates remain known and missing Pix prices do not fall back to a higher total', () => {
@@ -107,8 +109,8 @@ test('copied request contains contact, scope, selected and alternative payments,
     'Total sem desconto da campanha: ' + amount(120340),
     'Desconto da campanha: −' + amount(36102),
     'Estimativa com a campanha: ' + amount(84238),
-    'OPÇÃO ESCOLHIDA: Boleto em 6 parcelas — 6x de ' + amount(14040),
-    'Pix: ' + amount(80026), 'Cartão de crédito: 10x de ' + amount(8424),
+    'OPÇÃO ESCOLHIDA: Boleto em até 6x, sob consulta — Exemplo: 6x de ' + amount(14040),
+    'Pix: ' + amount(80026), 'Cartão de crédito em até 10x sem juros — Exemplo: 10x de ' + amount(8424),
     '15/12/2026',
     'Contato autorizado', 'O preenchimento não equivale à proposta nem à sua aprovação',
   ]) assert.ok(copy.includes(text), text);

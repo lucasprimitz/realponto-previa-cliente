@@ -3,7 +3,7 @@ declare(strict_types=1);
 namespace Realponto;
 
 final class Domain {
-    public const PAYMENTS = ['pix' => 'Pix — 5% de desconto', 'boleto' => 'Boleto em 6 parcelas — sob consulta', 'credit-card' => 'Cartão de crédito em 10 parcelas sem juros'];
+    public const PAYMENTS = ['pix' => 'Pix — 5% de desconto', 'boleto' => 'Boleto em até 6 parcelas — sob consulta', 'credit-card' => 'Cartão de crédito em até 10 parcelas sem juros'];
     public function __construct(private readonly array $catalog, private readonly string $pricingVersion) {}
     public static function load(): self {
         $raw = file_get_contents(dirname(__DIR__) . '/pricing.json');

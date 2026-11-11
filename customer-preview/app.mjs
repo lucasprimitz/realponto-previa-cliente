@@ -157,8 +157,8 @@ function renderSummary() {
   if (!ready) return;
   if (quote.status !== 'priced') {
     setText('#pix-price', 'Valor sob consulta');
-    setText('#boleto-price', 'Em até 6 parcelas');
-    setText('#card-price', 'Em 10 parcelas');
+    setText('#boleto-price', 'Valor sob consulta');
+    setText('#card-price', 'Valor sob consulta');
     setText('#pix-saving', 'Desconto calculado na proposta');
     setText('#payment-method-help', 'Informe sua preferência. Os valores e as condições serão confirmados na proposta.');
     return null;
@@ -176,7 +176,7 @@ function renderSummary() {
   setText('#pix-saving', `Economize mais ${formatMoney(quote.cents - payments.pixCents)} no Pix`);
   setText('#boleto-price', `6x de ${formatMoney(installments.boletoInstallmentCents)}`);
   setText('#card-price', `10x de ${formatMoney(installments.cardInstallmentCents)}`);
-  setText('#payment-method-help', 'Parcelas com valores aproximados por arredondamento. As condições serão confirmadas na proposta.');
+  setText('#payment-method-help', 'Os valores aproximados das parcelas consideram o prazo máximo de cada opção. Você pode escolher menos parcelas ao confirmar a proposta.');
   return quote.cents;
 }
 function clearError() {

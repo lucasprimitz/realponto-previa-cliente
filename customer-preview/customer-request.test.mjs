@@ -108,8 +108,8 @@ test('normaliza máscaras e admite CNPJ alfanumérico sem afirmar validade cadas
 
 test('as três preferências são incluídas sem transformar preferência em cobrança', () => {
   assert.deepEqual(PAYMENT_METHODS.map(item => item.id), ['pix', 'boleto', 'credit-card']);
-  assert.equal(request({paymentMethod: 'boleto'}).payment.label, 'Boleto em 6 parcelas — sob consulta');
-  assert.equal(request({paymentMethod: 'credit-card'}).payment.label, 'Cartão de crédito em 10 parcelas sem juros');
+  assert.equal(request({paymentMethod: 'boleto'}).payment.label, 'Boleto em até 6 parcelas — sob consulta');
+  assert.equal(request({paymentMethod: 'credit-card'}).payment.label, 'Cartão de crédito em até 10 parcelas sem juros');
   for (const method of PAYMENT_METHODS) {
     const result = request({paymentMethod: method.id});
     assert.deepEqual(result.payment, {method: method.id, label: method.label});

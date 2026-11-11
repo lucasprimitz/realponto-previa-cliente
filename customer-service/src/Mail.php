@@ -35,17 +35,18 @@ final class Mail {
             ? 'Acima de ' . number_format($limit, 0, ',', '.') . ' ' . $noun . ' — sob consulta'
             : 'Até ' . number_format((int)$value, 0, ',', '.') . ' ' . $noun;
         return [
+            'paymentLabel' => Domain::PAYMENTS[$r['payment']['method']] ?? $r['payment']['label'],
             'contact' => ['Nome' => $p['name'], 'Empresa' => $p['company'], 'E-mail' => $p['email'], 'Telefone / WhatsApp' => self::telephone($p['phone']), 'CPF / CNPJ' => self::document($p['taxId'] ?? null)],
             'configuration' => ['Sistema' => $systems[$c['system']] ?? $c['system'], 'Horários' => $quantity($c['schedules'], 'horários', 100), 'Funcionários' => $quantity($c['employees'], 'funcionários', 1000), 'Banco de horas' => $c['bankHours'] ? 'Sim' : 'Não', 'Escalas' => $c['workScale'] ? 'Sim' : 'Não', 'Inativação dos horários antigos' => $c['system'] === 'secullum-offline' ? 'Não contemplada para Secullum Offline' : 'Contemplada'],
         ];
     }
     private static function paymentOptions(array $estimate): array {
         $priced = ($estimate['totalCents'] ?? null) !== null;
-        $installment = static fn(string $key, int $count): string => $priced && isset($estimate[$key]) ? $count . 'x de ' . self::money($estimate[$key]) : 'Sob consulta';
+        $installment = static fn(string $key, int $count): string => $priced && isset($estimate[$key]) ? 'Ex.: ' . $count . 'x de ' . self::money($estimate[$key]) : 'Sob consulta';
         return [
             'pix' => ['title' => 'Pix', 'amount' => $priced ? self::money($estimate['pixCents'] ?? null) : 'Sob consulta', 'condition' => 'À vista · 5% de desconto extra'],
-            'boleto' => ['title' => 'Boleto', 'amount' => $installment('boletoInstallmentCents', 6), 'condition' => '6 parcelas · sob consulta e análise do cliente'],
-            'credit-card' => ['title' => 'Cartão de crédito', 'amount' => $installment('cardInstallmentCents', 10), 'condition' => '10 parcelas sem juros'],
+            'boleto' => ['title' => 'Boleto', 'amount' => $installment('boletoInstallmentCents', 6), 'condition' => 'Até 6x · sob consulta e análise do cliente'],
+            'credit-card' => ['title' => 'Cartão de crédito', 'amount' => $installment('cardInstallmentCents', 10), 'condition' => 'Até 10x sem juros'],
         ];
     }
     public static function body(array $item): string {
@@ -62,7 +63,7 @@ final class Mail {
             $lines[] = ''; $lines[] = $title;
             foreach ($details[$key] as $label => $value) $lines[] = $label . ': ' . $value;
         }
-        $lines[] = ''; $lines[] = 'PAGAMENTO'; $lines[] = 'Pagamento desejado: ' . $r['payment']['label'];
+        $lines[] = ''; $lines[] = 'PAGAMENTO'; $lines[] = 'Pagamento desejado: ' . $details['paymentLabel'];
         foreach (self::paymentOptions($e) as $key => $option) {
             $selection = $r['payment']['method'] === $key ? '[ESCOLHIDO PELO CLIENTE] ' : '';
             $lines[] = $selection . $option['title'] . ': ' . $option['amount'] . ' — ' . $option['condition'];
@@ -105,7 +106,7 @@ final class Mail {
         $summary = '<tr><td style="padding:0 24px 18px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#292578" style="width:100%;background-color:#292578;border-radius:12px;"><tr><td style="padding:23px 22px 21px;color:#ffffff;"><p style="margin:0 0 7px;font-size:13px;line-height:19px;font-weight:700;letter-spacing:.7px;color:#e2dff7;">INVESTIMENTO ESTIMADO</p><p style="margin:0 0 8px;font-size:15px;line-height:22px;color:#ffffff;">' . $priceLabel . '</p><p style="margin:0 0 10px;font-size:34px;line-height:42px;font-weight:700;color:#ffffff;">' . $total . '</p><p style="margin:0;font-size:14px;line-height:21px;color:#eceafa;">' . $priceNote . '</p></td></tr>' . $campaignRow . '</table></td></tr>';
         $contact = self::section('Dados do cliente', self::rows($details['contact']));
         $configuration = self::section('Configuração solicitada', self::rows($details['configuration']));
-        $payment = '<p style="margin:3px 0 16px;font-size:15px;line-height:23px;color:#55556e;">Preferência informada pelo cliente: <strong style="color:#292578;">' . self::escape($r['payment']['label']) . '</strong></p>';
+        $payment = '<p style="margin:3px 0 16px;font-size:15px;line-height:23px;color:#55556e;">Preferência informada pelo cliente: <strong style="color:#292578;">' . self::escape($details['paymentLabel']) . '</strong></p>';
         $payment .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;table-layout:fixed;"><tr>';
         foreach (self::paymentOptions($e) as $key => $option) {
             $selected = $r['payment']['method'] === $key;

@@ -120,6 +120,15 @@ $unsafeItem['request']['payment']['label'] = '<iframe src="https://example.inval
 $escaped = Mail::html($unsafeItem);
 foreach (['<script', '<img src=x', '<b>Teste</b>', '<iframe'] as $payload) check(!str_contains($escaped, $payload), 'Dados do formulário precisam ser escapados no HTML.');
 check(str_contains($escaped, '&lt;') && str_contains($escaped, '&amp;'), 'HTML deve exibir os dados como texto.');
+foreach (['boleto' => [6, 'boletoInstallmentCents', 'Boleto em 6 parcelas — sob consulta', 'Boleto em até 6 parcelas — sob consulta'],
+          'credit-card' => [10, 'cardInstallmentCents', 'Cartão de crédito em 10 parcelas sem juros', 'Cartão de crédito em até 10 parcelas sem juros']] as $method => [$limit, $amountField, $oldLabel, $newLabel]) {
+    $legacyItem = $mailItem;
+    $legacyItem['request']['payment'] = ['method' => $method, 'label' => $oldLabel];
+    foreach ([Mail::body($legacyItem), Mail::html($legacyItem)] as $message) {
+        check(str_contains($message, $newLabel) && !str_contains($message, $oldLabel), 'O e-mail deve exibir o limite de parcelas também nas solicitações anteriores.');
+        check(str_contains($message, 'Ex.: ' . $limit . 'x de ' . Mail::money($legacyItem['request']['estimate'][$amountField])), 'A parcela apresentada deve ser um exemplo calculado para o prazo máximo.');
+    }
+}
 foreach (['secullum-offline', 'secullum-rh', 'rhid', 'iponto'] as $system) {
     foreach (array_keys(Domain::PAYMENTS) as $method) {
         foreach ([10, 'consultar'] as $schedules) {
