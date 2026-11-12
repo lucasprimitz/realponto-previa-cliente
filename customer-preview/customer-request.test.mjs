@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {PAYMENT_METHODS, normalizeTaxId, formatTaxId, formatPhone, isTaxIdFormatValid, buildCustomerRequest} from './customer-request.mjs';
 
-import {calculateCustomerQuote, CAMPAIGN} from './customer-model.mjs';
+import {calculateCustomerQuote, CAMPAIGN, SCHEDULES, EMPLOYEES} from './customer-model.mjs';
 const now = new Date(CAMPAIGN.deadlineISO + 'T12:00:00-03:00');
 const expired = new Date(new Date(CAMPAIGN.deadlineISO + 'T23:59:59.999-03:00').getTime() + 1);
 const input = {
-  system: 'rhid', schedules: '40', employees: '100', bankHours: false, workScale: false,
+  system: 'rhid', schedules: String(SCHEDULES[0]), employees: String(EMPLOYEES[0]), bankHours: false, workScale: false,
   contactName: ' Pessoa de teste ', company: ' Empresa de exemplo ',
   email: ' teste@example.com ', phone: ' (11) 99999-0000 ',
   taxId: '', paymentMethod: 'pix', contactPermission: true,
@@ -83,7 +83,7 @@ test('solicitação única reúne escopo, contatos, documento e forma de pagamen
   assert.deepEqual(request({taxId: '123.456.789-00'}), {
     schemaVersion: 1, createdAt: now.toISOString(),
     contact: {name: 'Pessoa de teste', company: 'Empresa de exemplo', email: 'teste@example.com', phone: '(11) 99999-0000', taxId: '12345678900'},
-    configuration: {system: 'rhid', schedules: 40, employees: 100, bankHours: false, workScale: false},
+    configuration: {system: 'rhid', schedules: Number(input.schedules), employees: Number(input.employees), bankHours: false, workScale: false},
     payment: {method: 'pix', label: 'Pix — 5% de desconto'},
     estimate: {status: 'priced', totalCents: expectedTotal, campaignDiscountApplied: true},
     consent: true,
@@ -146,7 +146,7 @@ test('contatos e escolhas incompletos não geram uma solicitação pronta', () =
   for (const field of ['contactName', 'company', 'email', 'phone']) {
     assert.throws(() => request({[field]: '   '}), error => error.field === field);
   }
-  for (const changes of [{system: 'outro'}, {schedules: 15}, {employees: ''}]) {
+  for (const changes of [{system: 'outro'}, {schedules: SCHEDULES.at(-1) + 1}, {employees: ''}]) {
     assert.throws(() => request(changes), error => error.field === 'configuration');
   }
   for (const field of ['bankHours', 'workScale']) {

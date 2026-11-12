@@ -30,7 +30,7 @@ O formulário não cobra, não aprova propostas e não envia confirmação autom
 
 ## Preparar o pacote
 
-Obtenha uma cópia da branch `main` do repositório `lucasprimitz/realponto-previa-cliente`. Confira o resultado dos testes e, quando disponível, o registro `pricing-sync.json` para identificar a versão das regras recebida do sistema interno. Com Node 24 ou superior:
+Obtenha uma cópia da branch `main` do repositório `lucasprimitz/realponto-previa-cliente`. Confira os testes e a tabela oficial `customer-service/pricing.json`. Os preços agora são mantidos neste projeto e compartilhados com o sistema interno pela API de leitura; siga a ordem de migração em [Tabela de preços compartilhada](SINCRONIZACAO-PRECOS.md). Com Node 24 ou superior:
 
 ```sh
 node scripts/export-contact-pricing.mjs
@@ -40,7 +40,7 @@ node customer-service/tests/http.mjs /CAMINHO/DO/PHP
 node scripts/package-customer-service.mjs /CAMINHO/NOVO/realponto-contatos-VERSAO VERSAO
 ```
 
-O destino precisa ser uma pasta nova. O pacote contém `public/`, fontes do servidor, regras de preço, dependência declarada e este roteiro. Os valores do frontend e do PHP são gerados da mesma versão de `dist/quote.mjs`. Regenerar o pacote completo após alterações aprovadas nos valores ou prazos; não editar apenas o JSON do servidor. A [sincronização de preços](SINCRONIZACAO-PRECOS.md) atualiza os arquivos deste repositório quando configurada na origem. Ela não altera sozinha os arquivos da hospedagem: a TI precisa publicar a nova versão completa, com frontend e PHP juntos.
+O destino precisa ser uma pasta nova. O pacote contém `public/`, fontes do servidor, a tabela oficial de preços, dependência declarada e este roteiro. Frontend e PHP usam `customer-service/pricing.json`. Editar esse JSON, validar e regenerar o pacote completo após alterações aprovadas nos valores ou prazos. A [tabela de preços compartilhada](SINCRONIZACAO-PRECOS.md) permite que o sistema interno consulte os dados publicados; a TI ainda precisa publicar a nova versão completa deste projeto na hospedagem.
 
 O empacotador não inclui senha, chave, banco, sessões, dados de teste nem `vendor/`. Na pasta do pacote, executar:
 
@@ -100,7 +100,7 @@ Se um processo for interrompido após o SMTP aceitar a mensagem e antes de regis
 
 O cabeçalho e o botão do sistema interno pertencem ao repositório original e não estão incluídos neste projeto separado. Depois de definir a hospedagem, informar ao responsável pelo sistema interno o endereço HTTPS do painel `contatos/`, para que ele configure o atalho **Solicitações**. A TI pode instalar e testar o painel diretamente por esse endereço sem receber acesso ao código do simulador interno. O formulário do cliente não expõe os contatos; a tela de login pode ser acessível, mas todas as leituras e alterações de dados exigem sessão autenticada no PHP.
 
-O painel e a API precisam de `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` e proteção contra enquadramento (`frame-ancestors 'none'` / `X-Frame-Options: DENY`). O HTML funcional usa `connect-src 'self'`. Não reutilizar a configuração estática da prévia com `connect-src 'none'`, pois ela bloqueia o envio.
+O painel e a API precisam de `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` e proteção contra enquadramento (`frame-ancestors 'none'` / `X-Frame-Options: DENY`). O HTML funcional e a prévia usam `connect-src 'self'` para ler o módulo JSON local; a prévia continua sem API de envio configurada. O servidor deve servir `.json` como `application/json` e `.mjs` como `text/javascript`.
 
 ## Conferência antes de liberar
 

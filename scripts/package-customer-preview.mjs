@@ -2,28 +2,41 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
+import {contactPricing} from './export-contact-pricing.mjs';
+import {validateCatalog} from '../dist/pricing-catalog.mjs';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
 export const PUBLIC_FILES = Object.freeze([
   'index.html', 'preview.css', 'app.mjs', 'customer-model.mjs',
-  'customer-request.mjs', 'request-transport.mjs', 'activity.mjs', 'quote.mjs', 'assets/realponto-30-anos.png',
+  'customer-request.mjs', 'request-transport.mjs', 'activity.mjs', 'quote.mjs', 'pricing-catalog.mjs', 'pricing.json', 'assets/realponto-30-anos.png',
   'assets/lgRP.png',
 ]);
 const sha256 = content => createHash('sha256').update(content).digest('hex');
+
+export async function publicFileContent(relative, releaseId = '') {
+  if (relative === 'pricing.json') return Buffer.from(JSON.stringify(validateCatalog(contactPricing()), null, 2) + '\n');
+  const source = ['quote.mjs', 'pricing-catalog.mjs', 'assets/realponto-30-anos.png'].includes(relative) ? 'dist' : 'customer-preview';
+  let content = await fs.readFile(path.join(project, source, relative));
+  if (relative === 'customer-model.mjs') {
+    const text = content.toString('utf8');
+    if (!text.includes("'../customer-service/pricing.json'") || !text.includes("'../dist/quote.mjs'")) throw new Error('Revisar os imports da tabela compartilhada antes de empacotar.');
+    content = Buffer.from(text.replaceAll("'../dist/quote.mjs'", "'./quote.mjs'").replaceAll("'../dist/pricing-catalog.mjs'", "'./pricing-catalog.mjs'").replaceAll("'../customer-service/pricing.json'", "'./pricing.json'"));
+  }
+  if (releaseId && relative.endsWith('.mjs')) {
+    content = Buffer.from(content.toString('utf8').replace(/(['"])(\.{1,2}\/[^'"?]+\.(?:mjs|json))\1/g, (_, quote, file) => quote + file + '?v=' + encodeURIComponent(releaseId) + quote));
+  }
+  if (releaseId && relative === 'index.html') {
+    content = Buffer.from(content.toString('utf8').replace('src="./app.mjs"', 'src="./app.mjs?v=' + encodeURIComponent(releaseId) + '"'));
+  }
+  return content;
+}
 
 export async function packageCustomerPreview(destination, releaseId) {
   if (!destination || !path.isAbsolute(destination)) throw new Error('Informe uma pasta de destino absoluta e nova.');
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(releaseId ?? '')) throw new Error('Informe um identificador de versão válido.');
   const files = new Map();
   for (const relative of PUBLIC_FILES) {
-    const source = ['quote.mjs', 'assets/realponto-30-anos.png'].includes(relative) ? 'dist' : 'customer-preview';
-    let content = await fs.readFile(path.join(project, source, relative));
-    if (relative === 'customer-model.mjs') {
-      const text = content.toString('utf8');
-      const sharedImport = "'../dist/quote.mjs'";
-      if (text.split(sharedImport).length !== 3) throw new Error('Revisar os imports do módulo compartilhado antes de empacotar.');
-      content = Buffer.from(text.replaceAll(sharedImport, "'./quote.mjs'"));
-    }
+    const content = await publicFileContent(relative, releaseId);
     files.set(`public/${relative}`, content);
   }
   for (const server of ['apache', 'nginx']) {
@@ -41,7 +54,7 @@ export async function packageCustomerPreview(destination, releaseId) {
     mountPath: '/previa-cliente/',
     intendedUrl: 'http://192.168.90.7:8082/previa-cliente/',
     mode: 'internal-approval-demo',
-    pricing: 'Snapshot sincronizado de dist/quote.mjs; regenerar e publicar o pacote após cada sincronização aprovada.',
+    pricing: 'Snapshot de customer-service/pricing.json; regenerar e publicar o pacote após cada alteração aprovada.',
     files: [...files].map(([file, content]) => ({file, bytes: content.length, sha256: sha256(content)})),
   };
   files.set('MANIFESTO.json', Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`));

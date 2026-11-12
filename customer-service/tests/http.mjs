@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import {randomBytes, randomUUID} from 'node:crypto';
+import {createHash} from 'node:crypto';
 import {spawn, spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
@@ -300,15 +301,34 @@ async function checkMonthlyActivity(customer, admin) {
   check(previous.traffic.hours,august.traffic.hours,'O envio posterior mantém os horários historicamente observados');
 }
 
-const request={schemaVersion:1,createdAt:'1900-01-01',contact:{name:'Teste HTTP',company:'Empresa Exemplo',email:'teste@example.invalid',phone:'11999999999',taxId:null},configuration:{system:'iponto',schedules:10,employees:40,bankHours:true,workScale:false},payment:{method:'pix',label:'fake'},estimate:{totalCents:1},consent:true};
+const canonical = await fs.readFile(path.join(service, 'pricing.json'));
+const catalog = JSON.parse(canonical);
+const request={schemaVersion:1,createdAt:'1900-01-01',contact:{name:'Teste HTTP',company:'Empresa Exemplo',email:'teste@example.invalid',phone:'11999999999',taxId:null},configuration:{system:'iponto',schedules:catalog.schedules[0],employees:catalog.employees[0],bankHours:true,workScale:false},payment:{method:'pix',label:'fake'},estimate:{totalCents:Number.MAX_SAFE_INTEGER},consent:true};
 try {
   await seedLegacyActivity();
   let ready=false; const readinessDeadline=Date.now()+60000; while(Date.now()<readinessDeadline && server.exitCode===null){try{await fetch(`${origin}/api/session.php`,{signal:AbortSignal.timeout(1000)});ready=true;break;}catch{await new Promise(resolve=>setTimeout(resolve,50));}}
   assert.ok(ready,`PHP startup timed out or exited (${server.exitCode}): ${logs}`);
+  const published = await fetch(`${origin}/api/pricing.php`, {headers: {Origin:'http://192.168.90.7:8082', 'Sec-Fetch-Site':'cross-site'}});
+  check(published.status,200,'Tabela compartilhada aceita leitura do sistema interno');
+  check(published.headers.get('access-control-allow-origin'),'*','Somente preços públicos permitem leitura externa');
+  check(published.headers.get('access-control-allow-credentials'),null,'Catálogo público não usa credenciais');
+  check(published.headers.get('set-cookie'),null,'Consulta pública não abre sessão');
+  check(published.headers.get('cache-control'),'no-store','Consulta obtém a tabela atual');
+  const snapshot=await published.json();
+  check(snapshot.version,createHash('sha256').update(canonical).digest('hex'),'Versão corresponde ao JSON canônico');
+  check(Object.keys(snapshot.catalog),['pricing','campaign','schedules','employees'],'Resposta não expõe sistemas, configurações ou dados privados');
+  check(snapshot.catalog.pricing,JSON.parse(canonical).pricing,'Valores publicados são os usados pelo servidor');
+  const head=await fetch(`${origin}/api/pricing.php`,{method:'HEAD'});
+  check(head.status,200,'HEAD aceita consulta da tabela'); check(await head.text(),'','HEAD não devolve corpo');
+  for(const method of ['POST','PUT','DELETE','OPTIONS']) {
+    const refused=await fetch(`${origin}/api/pricing.php`,{method});
+    check(refused.status,405,'Método de escrita não altera a tabela'); check(refused.headers.get('allow'),'GET, HEAD','Somente métodos de leitura são permitidos');
+  }
   const customer=new Client(), admin=new Client(), stranger=new Client();
   let result=await customer.call('session.php'); check(result.status,200,'Sessão pública'); check(result.body.authenticated,false,'Sessão começa sem login');
   assert.match(result.headers.get('set-cookie'),/HttpOnly/i); assert.match(result.headers.get('set-cookie'),/SameSite=Strict/i); checks+=2;
   check((await stranger.call('requests.php')).status,401,'Lista sem senha bloqueada');
+  check((await stranger.call('requests.php',{headers:{Origin:'http://192.168.90.7:8082','Sec-Fetch-Site':'cross-site'}})).status,403,'CORS público de preços não libera a API de contatos');
   check((await stranger.call('reports.php?year=2026')).status,401,'Relatório sem senha bloqueado');
   check((await stranger.call('request-update.php',{method:'POST',data:{}})).status,401,'Escrita sem senha bloqueada');
   check((await customer.call('requests.php',{method:'POST',data:request,omitCsrf:true})).status,403,'CSRF ausente');
@@ -316,6 +336,7 @@ try {
   check((await customer.call('requests.php',{method:'POST',data:request,headers:{Origin:'https://evil.example.invalid'}})).status,403,'Origem externa bloqueada');
   check((await customer.call('requests.php',{method:'POST',data:request,headers:{'Content-Type':'text/plain'}})).status,415,'Tipo de conteúdo rejeitado');
   check((await customer.call('requests.php',{method:'POST',raw:JSON.stringify({payload:'a'.repeat(17000)})})).status,413,'Corpo limitado');
+  check((await customer.call('requests.php',{method:'POST',data:{...request,pricingVersion:'outdated'}})).status,409,'Preços mudaram após a consulta: envio pede nova conferência');
   const key=randomUUID(); const created=await customer.call('requests.php',{method:'POST',data:request,headers:{'Idempotency-Key':key,...deviceHeaders.desktop}});
   check(created.status,201,'Recebimento persistido'); check(created.body.mailStatus,'disabled','SMTP não configurado não perde contato');
   assert.equal('request' in created.body,false); assert.equal('contact' in created.body,false); checks+=2;
@@ -327,7 +348,7 @@ try {
   result=await admin.call('login.php',{method:'POST',data:{password}}); check(result.status,200,'Login válido'); check(result.body.authenticated,true,'Autenticação confirmada');
   assert.notEqual(admin.cookie,oldCookie); assert.notEqual(admin.csrf,oldCsrf); checks+=2;
   result=await admin.call('requests.php'); check(result.body.total,1,'Somente um registro');
-  const item=result.body.items[0]; check(item.request.contact.name,'Teste HTTP','Contato preservado'); assert.notEqual(item.request.estimate.totalCents,1); checks++;
+  const item=result.body.items[0]; check(item.request.contact.name,'Teste HTTP','Contato preservado'); assert.notEqual(item.request.estimate.totalCents,request.estimate.totalCents); checks++;
   check(result.headers.get('cache-control'),'no-store, private','Sem cache de dados pessoais');
   const reportYear = new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric'}).format(new Date(item.receivedAt));
   const reportResponse = await admin.call('reports.php?year='+reportYear);
@@ -382,6 +403,7 @@ try {
   check((await customer.call('activity.php',{method:'POST',data:sampleActivity})).status,503,'Coleta desativada com o recebimento');
   await writeConfig({...configuration,origin:`https://127.0.0.1:${port}`,developmentLoopback:false});
   check((await customer.call('session.php',{headers:{'X-Forwarded-Proto':'https'}})).status,403,'HTTPS não pode ser falsificado por cabeçalho');
+  check((await fetch(`${origin}/api/pricing.php`)).status,200,'Preços não dependem da configuração privada de contatos');
   await writeConfig();
   for(const target of ['/config.example.php','/config.php','/src/Config.php','/contacts.sqlite','/pricing.json']) check((await fetch(origin+target)).status,404,'Arquivo privado fora da publicação');
   console.log(`OK: ${checks} verificações HTTP reais; armazenamento, login, CSRF, origem, expiração, logout e limites. Nenhum e-mail real enviado.`);

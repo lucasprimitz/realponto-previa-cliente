@@ -22,8 +22,8 @@ test('pacote funcional separa o PHP e os segredos dos arquivos públicos e prese
     assert.equal(createHash('sha256').update(bytes).digest('hex'), file.sha256, file.file);
     assert.doesNotMatch(file.file, /(?:sqlite|private|vendor|tests|contacts-config)/);
     if (file.file.startsWith('public/')) {
-      assert.ok(!/config|pricing\.json|composer|src\//.test(file.file), file.file);
-      if (file.file.endsWith('.php')) assert.match(file.file, /^public\/api\/(session|requests|login|logout|request-update|request-archive|reports|activity)\.php$/);
+      assert.ok(!/config|composer|src\//.test(file.file), file.file);
+      if (file.file.endsWith('.php')) assert.match(file.file, /^public\/api\/(session|requests|login|logout|request-update|request-archive|reports|activity|pricing)\.php$/);
     }
   }
   assert.ok(manifest.files.some(item => item.file === 'composer.lock'));
@@ -35,10 +35,15 @@ test('pacote funcional separa o PHP e os segredos dos arquivos públicos e prese
   assert.ok(manifest.files.some(item => item.file === 'public/api/activity.php'));
   assert.ok(manifest.files.some(item => item.file === 'public/activity.mjs'));
   assert.ok(manifest.files.some(item => item.file === 'public/api/request-archive.php'));
+  assert.ok(manifest.files.some(item => item.file === 'public/api/pricing.php'));
+  const publicPricing = JSON.parse(await fs.readFile(path.join(output, 'public/pricing.json'), 'utf8'));
+  assert.equal('systems' in publicPricing, false);
+  assert.deepEqual(publicPricing.pricing, contactPricing().pricing);
+  assert.deepEqual(await fs.readFile(path.join(output, 'pricing.json')), await fs.readFile(new URL('../customer-service/pricing.json', import.meta.url)));
   assert.ok(manifest.files.some(item => item.file === 'public/contatos/panel-model.mjs'));
   assert.match(await fs.readFile(path.join(output, 'public/contatos/panel.mjs'), 'utf8'), /from '\.\/panel-model\.mjs'/);
   await assert.rejects(packageCustomerService(output, 'test-functional'), {code: 'EEXIST'});
   const original = await fs.readFile(new URL('../customer-preview/index.html', import.meta.url), 'utf8');
   assert.match(original, /name="realponto-api-base" content=""/);
-  assert.match(original, /connect-src 'none'/);
+  assert.match(original, /connect-src 'self'/);
 });

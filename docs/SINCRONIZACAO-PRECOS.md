@@ -1,58 +1,31 @@
-# Sincronização de preços — origem interna e página do cliente
+# Tabela de preços compartilhada
 
-## Responsabilidades
+`customer-service/pricing.json`, neste projeto (`realponto-previa-cliente`), é a única tabela editável de preços, adicionais, campanha e faixas de horários/funcionários. O site do cliente e o sistema interno consultam os mesmos dados publicados. A fórmula continua no código e as opções de cada sistema permanecem independentes.
 
-| Parte | Repositório | Branch |
-| --- | --- | --- |
-| Origem das regras de preços e da campanha | `lucasprimitz/realponto-jornada` | `main` |
-| Página do cliente e serviço PHP | `lucasprimitz/realponto-previa-cliente` | `main` |
+## Como atualizar os preços
 
-A TI pode receber acesso somente ao segundo repositório. As regras são mantidas em `dist/quote.mjs` da origem. Não alterar os preços diretamente na cópia da página do cliente nem no JSON do PHP.
+1. Editar somente `customer-service/pricing.json`. Valores monetários usam centavos: `90000` representa R$ 900,00. Os campos terminados em `Percent` são percentuais inteiros. Ao mudar a data da campanha, manter `deadlineISO` e `deadlineLabel` correspondentes e o fuso `America/Sao_Paulo`.
+2. Executar `node scripts/check-pricing-sync.mjs`, `npm test` e `npm run test:contacts` (Node 24, PHP com SQLite/sodium e dependências Composer). Os testes verificam tabelas inválidas, equivalência dos cálculos JS/PHP, recebimento e empacotamento; não é preciso editar números de referência nos testes após uma mudança comercial.
+3. Revisar e enviar a alteração para a `main` deste projeto, seguindo o processo da empresa.
+4. Publicar o pacote funcional completo pelo workflow **Atualizar Jornada funcional na HostGator**. Com `JORNADA_AUTO_DEPLOY=true`, o push pode publicar automaticamente conforme as regras do ambiente `jornada-producao`. Caso contrário, usar a execução manual `modo=publicar`.
+5. Conferir `https://jornada.realponto.com.br/api/pricing.php` e os preços no site. O sistema interno busca a nova tabela ao abrir/recarregar a página ou usar seu botão de atualização, sem uma nova publicação do sistema interno a cada alteração de preços.
 
-O fluxo é: alteração aprovada na origem → sincronização no GitHub → validação do projeto do cliente → publicação de uma nova versão completa na hospedagem pela TI.
+Não editar os números de contingência de `dist/quote.mjs` para atualizar preços. Esse módulo contém a fórmula e uma referência inicial para o sistema interno; a página do cliente aplica o JSON canônico. O script `export-contact-pricing.mjs DESTINO` apenas cria uma cópia validada do JSON e recusa sobrescrever a fonte.
 
-## O que a automação transfere
+## Leitura pública
 
-O workflow **Sincronizar Preços da Página do Cliente**, em `.github/workflows/sincronizar-precos.yml` do repositório de origem, atualiza somente:
+`GET /api/pricing.php` devolve `{schemaVersion:1, version, catalog}`. `version` é o SHA256 dos bytes do arquivo canônico instalado. `catalog` inclui somente `pricing`, `campaign`, `schedules` e `employees`. O endpoint aceita GET/HEAD, libera leitura CORS e não abre sessão nem carrega banco, senha ou configuração SMTP. As outras APIs continuam com suas proteções de origem e autenticação.
 
-- `dist/quote.mjs`: módulo de cálculo consumido pela página.
-- `customer-service/pricing.json`: parâmetros para o cálculo validado pelo PHP.
-- `pricing-sync.json`: identificação do repositório, commit de origem e integridade das regras sincronizadas.
+O PHP usa o mesmo arquivo privado validado para calcular a estimativa. No modo conectado, a tela confirma o catálogo na API antes de liberar o formulário e novamente antes de enviar. Uma mudança de versão durante o preenchimento mostra os novos valores e pede que o cliente confira antes de reenviar. O servidor rejeita uma versão enviada que já não corresponda à instalada. Falha na consulta não apresenta os valores de contingência como preços confirmados nem confirma o recebimento.
 
-A transferência preserva a página, o painel e os demais arquivos do destino. Não copia o simulador interno, seu histórico, senhas, dados de clientes ou configuração do servidor. A autorização de gravação é do repositório de destino; a limitação aos três arquivos é feita pelo script da automação.
+Na prévia demonstrativa, os pacotes incluem uma cópia pública sanitizada `public/pricing.json`, importada como JSON pelo navegador. Isso permite demonstração sem API. Essa prévia é um snapshot: precisa ser republicada para refletir mudanças. Os módulos e o JSON recebem a identificação da versão em seus imports para evitar misturar arquivos de versões anteriores no cache.
 
-## Ativação pelo responsável do repositório de origem
+## Migração e instalação
 
-A automação foi preparada, mas só poderá operar após a configuração da credencial. O token automático do GitHub Actions não tem acesso a outro repositório privado.
+1. Publicar primeiro a nova versão funcional do cliente, incluindo `src/Pricing.php`, `public/api/pricing.php`, `public/pricing-catalog.mjs` e `public/pricing.json`, junto dos demais arquivos do pacote.
+2. Garantir que a configuração web permita `/api/pricing.php`, `/pricing.json` e `/pricing-catalog.mjs`, servindo JSON como `application/json` e módulos como JavaScript. O modelo Nginx foi atualizado. Se existir whitelist em `.htaccess` na HostGator, a TI deve permitir esses arquivos; o deploy preserva o `.htaccess` existente. A prévia e o cliente precisam de CSP `connect-src 'self'` para importar o JSON local.
+3. Atualizar também o instalador privado `deploy/bin/deploy-jornada.sh` no servidor pelo procedimento existente da TI. A nova versão verifica API/hash, um único cabeçalho CORS, ausência de sessão, snapshot público e tipos MIME e faz rollback dos arquivos se a verificação falhar.
+4. Confirmar uma consulta pública sem cookies, inclusive com `Origin: http://192.168.90.7:8082`. Publicar então a adaptação do sistema interno em `realponto-jornada`.
+5. O workflow antigo que copiava preços do interno para este repositório deve estar removido/desativado antes das próximas alterações. `pricing-sync.json` foi retirado; o histórico dos preços é o Git deste projeto e o hash retornado pela API. Nenhum GitHub App, Client ID, chave privada de App ou token entre repositórios é necessário para a leitura compartilhada.
 
-1. Na conta que administra os projetos, criar um **fine-grained personal access token**, selecionando somente `lucasprimitz/realponto-previa-cliente` como repositório permitido.
-2. Conceder apenas a permissão de repositório **Contents: Read and write**, além dos metadados básicos exigidos pelo GitHub. Definir uma validade e um responsável pela renovação. Não conceder acesso ao repositório interno nessa credencial.
-3. Em **Settings → Secrets and variables → Actions** do repositório **de origem** `lucasprimitz/realponto-jornada`, salvar o token como segredo de repositório com o nome exato `PREVIA_SYNC_TOKEN`.
-4. Não salvar esse token no repositório do cliente, na hospedagem, em arquivo de código ou em mensagens. Ele é usado somente pelo workflow da origem. Não é necessário entregá-lo à TI que instala a página.
-5. Em **Actions** da origem, abrir **Sincronizar Preços da Página do Cliente** e executar **Run workflow** na branch `main`.
-
-Não existe uma variável adicional de habilitação. Se o segredo estiver ausente, vencido ou sem permissão, a execução deve falhar com orientação; essa falha não representa uma sincronização concluída. O responsável deve acompanhar as falhas de Actions e renovar a credencial antes do vencimento.
-
-Referências: [tokens com acesso restrito](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens), [segredos do GitHub Actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) e [limite do token automático por repositório](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/making-authenticated-api-requests-with-a-github-app-in-a-github-actions-workflow).
-
-## Conferir um ciclo sem mudar o preço real
-
-Depois da configuração, executar manualmente o workflow e conferir seu resultado. Verificar a identificação da origem e o hash em `pricing-sync.json` no destino. A execução deve confirmar a atualização necessária ou informar que as regras já estão iguais, sem precisar alterar um preço apenas para testar.
-
-Executar novamente com a mesma versão confirma o comportamento sem alteração: não deve criar commits de preços repetidos. Se houve alteração simultânea no destino ou outra falha, conferir o estado atual antes de executar novamente; não forçar a substituição do histórico.
-
-O projeto do cliente valida os arquivos recebidos. Seu workflow `.github/workflows/validar-cliente.yml` prepara um artefato com o pacote PHP quando os testes passam. A TI deve conferir o commit e o resultado da execução antes de instalar esse pacote. O teste da automação no GitHub não comprova que a página já foi atualizada no servidor.
-
-## Fazer o valor chegar ao site
-
-**Página funcional em PHP:** a TI deve instalar uma nova versão completa usando o [roteiro de solicitações](SOLICITACOES-PHP-TI.md). O pacote reúne o cálculo do navegador e o JSON do servidor a partir da mesma versão. Não copiar somente `quote.mjs` ou somente `pricing.json`: isso pode deixar a simulação diferente da estimativa registrada. Preservar banco, chave, senha, configuração privada e fila de e-mail entre as versões.
-
-O endereço definitivo e a forma de publicação da hospedagem ainda precisam ser definidos. O projeto não presume acesso ao servidor nem altera automaticamente o site da empresa apenas porque recebeu um commit. A TI poderá integrar a instalação do pacote validado ao seu próprio processo de publicação.
-
-**Prévia estática de aprovação:** após a TI instalar a nova versão do [atualizador da prévia](ATUALIZACAO-AUTOMATICA-PREVIA.md), ele consulta `main` do repositório do cliente aproximadamente a cada minuto e publica os arquivos estáticos. A prévia permanece demonstrativa, sem recebimento de contatos. Essa rotina não instala nem atualiza o serviço PHP.
-
-## Mudanças futuras
-
-Preços, percentuais, limites de pacotes e prazo da campanha devem ser alterados na origem, dentro do fluxo de revisão e autorização definido pelo responsável. Depois da publicação na origem, acompanhar sincronização, testes e implantação. Uma falha mantém a última versão publicada; não afirmar que os valores estão sincronizados sem conferir as etapas.
-
-Mudanças nas formas de pagamento, textos, sistemas disponíveis ou estrutura do cálculo podem exigir ajustes coordenados no frontend e no PHP, além da transferência de parâmetros. Essas alterações devem ser implementadas e testadas como funcionalidade, não tratadas como uma simples troca de preços.
+O pacote funcional mantém banco, sessões, configuração privada, chave e fila de e-mail existentes. Alterações na fórmula PHP/JavaScript ou nas condições de pagamento ainda são mudanças de código e precisam dos testes correspondentes; o JSON centraliza os parâmetros presentes nele.

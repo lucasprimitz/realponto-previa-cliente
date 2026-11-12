@@ -14,6 +14,7 @@ if [[ "${1:-}" == '-l' ]]; then exec /usr/bin/php "$@"; fi
 if [[ "${1:-}" == '-r' ]]; then
   if [[ "$2" == *'VACUUM INTO'* ]]; then printf 'snapshot-simulado\n' > "${@: -1}"; exit 0; fi
   if [[ "$2" == *'dataDirectory'* ]]; then printf '%s/realponto-cliente/data' "$HOME"; exit 0; fi
+  if [[ "$2" == *'$headers=[]'* ]]; then exit 0; fi
   cat >/dev/null; exit 0
 fi
 if [[ "${1:-}" == *'/bin/check.php' ]]; then echo 'CHECK OK (simulado)'; exit 0; fi
@@ -25,6 +26,8 @@ if [[ " $* " == *'/api/requests.php'* ]]; then
   if [[ "${MOCK_CURL_BAD:-}" == 1 ]]; then printf '503'; else printf '401'; fi
 elif [[ " $* " == *'/api/session.php'* ]]; then
   printf '{"ok":true}'
+elif [[ " $* " == *'/api/pricing.php'* ]]; then
+  if [[ " $* " == *' -I '* ]]; then printf 'Access-Control-Allow-Origin: *\r\n'; else printf '{"schemaVersion":1}'; fi
 else
   exit 0
 fi

@@ -9,11 +9,12 @@ $routes = [
     '/customer-request.mjs' => 'customer-request.mjs', '/request-transport.mjs' => 'request-transport.mjs',
     '/activity.mjs' => 'activity.mjs', '/assets/lgRP.png' => 'assets/lgRP.png',
     '/quote.mjs' => 'quote.mjs', '/assets/realponto-30-anos.png' => 'assets/realponto-30-anos.png',
+    '/pricing-catalog.mjs' => 'pricing-catalog.mjs', '/pricing.json' => 'pricing.json',
     '/contatos/' => 'contatos/index.html', '/contatos/index.html' => 'contatos/index.html',
     '/contatos/panel.css' => 'contatos/panel.css', '/contatos/panel.mjs' => 'contatos/panel.mjs',
     '/contatos/panel-model.mjs' => 'contatos/panel-model.mjs',
 ];
-foreach (['session', 'requests', 'reports', 'login', 'logout', 'request-update', 'request-archive', 'activity'] as $endpoint) {
+foreach (['session', 'requests', 'reports', 'login', 'logout', 'request-update', 'request-archive', 'activity', 'pricing'] as $endpoint) {
     if ($path === '/api/' . $endpoint . '.php') return false;
 }
 header('Cache-Control: no-store'); header('X-Content-Type-Options: nosniff');
@@ -23,6 +24,6 @@ if (!in_array($_SERVER['REQUEST_METHOD'], ['GET', 'HEAD'], true)) { http_respons
 if ($path === '/contatos') { header('Location: /contatos/', true, 302); exit; }
 if (!isset($routes[$path])) { http_response_code(404); exit; }
 $file = rtrim($_SERVER['DOCUMENT_ROOT'], '/\\') . '/' . $routes[$path];
-$mime = ['html' => 'text/html; charset=utf-8', 'mjs' => 'text/javascript; charset=utf-8', 'css' => 'text/css; charset=utf-8', 'png' => 'image/png'];
+$mime = ['html' => 'text/html; charset=utf-8', 'mjs' => 'text/javascript; charset=utf-8', 'json' => 'application/json; charset=utf-8', 'css' => 'text/css; charset=utf-8', 'png' => 'image/png'];
 header('Content-Type: ' . $mime[pathinfo($file, PATHINFO_EXTENSION)]);
 if ($_SERVER['REQUEST_METHOD'] !== 'HEAD') readfile($file);

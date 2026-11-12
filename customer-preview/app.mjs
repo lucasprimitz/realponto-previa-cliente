@@ -1,4 +1,4 @@
-import {SYSTEMS, SCHEDULES, EMPLOYEES, CAMPAIGN, calculateCustomerQuote, paymentOptions, paymentDisplay, formatMoney, formatNumber} from './customer-model.mjs';
+import {SYSTEMS, SCHEDULES, EMPLOYEES, CAMPAIGN, calculateCustomerQuote, paymentOptions, paymentDisplay, formatMoney, formatNumber, applyPricingCatalog, getPricingCatalog, loadSharedPricing} from './customer-model.mjs';
 import {PAYMENT_METHODS, buildCustomerRequest, formatPhone, formatTaxId} from './customer-request.mjs';
 import {activityChoice, browserActivityStore, createActivityTracker} from './activity.mjs';
 import {createRequestTransport} from './request-transport.mjs';
@@ -18,6 +18,24 @@ let transport;
 let transportError;
 const apiBase = document.querySelector('meta[name="realponto-api-base"]')?.content ?? '';
 const connected = apiBase.trim() !== '';
+const pricingStatus = document.querySelector('#pricing-status');
+let pricingVersion = null;
+let pricingUnavailable = false;
+async function fetchCurrentPricing() {
+  return loadSharedPricing({url: new URL('pricing.php', new URL(apiBase, document.baseURI)).href, fallback: getPricingCatalog()});
+}
+if (connected) {
+  const result = await fetchCurrentPricing();
+  pricingUnavailable = result.source !== 'remote';
+  if (!pricingUnavailable) { applyPricingCatalog(result.catalog); pricingVersion = result.version; }
+  else {
+    document.querySelector('.campaign-card').hidden = true;
+    pricingStatus.hidden = false;
+    pricingStatus.textContent = 'Não foi possível confirmar os preços atuais. Recarregue a página para tentar novamente.';
+    document.querySelector('#retry-pricing').hidden = false;
+  }
+}
+document.querySelector('#retry-pricing').addEventListener('click', () => location.reload());
 try { transport = createRequestTransport({apiBase}); } catch (error) { transportError = error; }
 const activity = transport?.mode === 'connected' ? createActivityTracker({
   update: browserActivityStore(new URL(apiBase, location.href).pathname),
@@ -37,16 +55,24 @@ function setSubmitting(value) {
   form.setAttribute('aria-busy', String(value));
   for (const control of document.querySelectorAll('#customer-form input, #customer-form select, #customer-form button, #edit-button')) control.disabled = value;
   renderSteps();
+  next.disabled = value || pricingUnavailable;
   next.firstChild.textContent = value ? 'Enviando… ' : currentStep === 4 ? 'Solicitar proposta ' : 'Continuar ';
 }
 
 function fillSelect(id, values, noun, customLabel) {
   const select = document.querySelector(id);
+  const previous = select.value;
+  while (select.options.length > 1) select.remove(1);
   for (const value of values) select.add(new Option(`Até ${formatNumber(value)} ${noun}`, String(value)));
   select.add(new Option(customLabel, 'consultar'));
+  select.value = previous === 'consultar' || values.includes(Number(previous)) ? previous : '';
 }
-fillSelect('#schedules', SCHEDULES, 'horários', 'Mais de 100 horários');
-fillSelect('#employees', EMPLOYEES, 'funcionários', 'Mais de 1.000 funcionários');
+function updateQuantities() {
+  fillSelect('#schedules', SCHEDULES, 'horários', `Mais de ${formatNumber(SCHEDULES.at(-1))} horários`);
+  fillSelect('#employees', EMPLOYEES, 'funcionários', `Mais de ${formatNumber(EMPLOYEES.at(-1))} funcionários`);
+  document.querySelector('#quantity-note').textContent = `Precisa de mais de ${formatNumber(SCHEDULES.at(-1))} horários ou ${formatNumber(EMPLOYEES.at(-1))} funcionários? Selecione a última opção para solicitar uma proposta personalizada.`;
+}
+updateQuantities();
 
 
 // Preserve the cursor when punctuation is inserted or an existing value is edited.
@@ -129,6 +155,10 @@ function updateCampaign(active) {
   for (const item of document.querySelectorAll('[data-campaign-percent]')) item.textContent = `${CAMPAIGN.discountPercent}%`;
   const offer = document.querySelector('#offer-percent');
   if (active) {
+    document.querySelector('.offer-tag').textContent = 'Campanha de Antecipação';
+    document.querySelector('.offer-value').hidden = false;
+    const deadline = document.createElement('strong'); deadline.dataset.deadline = ''; deadline.textContent = CAMPAIGN.deadlineLabel;
+    document.querySelector('.campaign-card>p').replaceChildren(document.createTextNode('Para propostas aprovadas até '), deadline, document.createTextNode('.'));
     offer.replaceChildren(document.createTextNode(String(CAMPAIGN.discountPercent)));
     const percent = document.createElement('span'); percent.textContent = '%'; offer.append(percent);
   } else {
@@ -142,8 +172,8 @@ function renderSummary() {
   const system = SYSTEMS.find(item => item.id === state.system);
   document.querySelector('#scope-retire-schedules').hidden = !system || system.id === 'secullum-offline';
   summaryField('#summary-system', system?.name ?? 'A selecionar', Boolean(system));
-  summaryField('#summary-schedules', quantityLabel(state.schedules, 100), Boolean(state.schedules));
-  summaryField('#summary-employees', quantityLabel(state.employees, 1000), Boolean(state.employees));
+  summaryField('#summary-schedules', quantityLabel(state.schedules, SCHEDULES.at(-1)), Boolean(state.schedules));
+  summaryField('#summary-employees', quantityLabel(state.employees, EMPLOYEES.at(-1)), Boolean(state.employees));
   summaryField('#summary-bank', selected('bankHours') ? (state.bankHours ? 'Sim' : 'Não') : 'A informar', Boolean(selected('bankHours')));
   summaryField('#summary-scale', selected('workScale') ? (state.workScale ? 'Sim' : 'Não') : 'A informar', Boolean(selected('workScale')));
   const quote = calculateCustomerQuote(state);
@@ -263,6 +293,7 @@ function renderSteps() {
     item.querySelector('.step-state').textContent = current ? 'Etapa atual' : button.disabled ? 'Preencha as etapas anteriores para acessar' : complete ? 'Concluída. Clique para revisar' : 'Disponível para revisão';
   });
   document.querySelector('#step-navigation-help').hidden = furthestStep === 1;
+  next.disabled = submitting || pricingUnavailable;
 }
 function showStep(step, focus = true) {
   if (submitting) return;
@@ -292,6 +323,7 @@ function showStep(step, focus = true) {
 form.addEventListener('submit', async event => {
   event.preventDefault();
   if (submitting) return;
+  if (pricingUnavailable) { fail('Recarregue a página para confirmar os preços antes de continuar.'); return; }
   clearError();
   for (let step = 1; step <= currentStep; step++) {
     const issue = stepIssue(step);
@@ -304,6 +336,19 @@ form.addEventListener('submit', async event => {
   if (currentStep < 4) { showStep(currentStep + 1); return; }
   // Contato, documento, configuração e pagamento seguem na mesma solicitação.
   try {
+    setSubmitting(true);
+    if (connected) {
+      const latest = await fetchCurrentPricing();
+      if (latest.source !== 'remote') throw new Error('Não foi possível confirmar os preços atuais. Tente enviar novamente em instantes.');
+      if (latest.version !== pricingVersion) {
+        applyPricingCatalog(latest.catalog);
+        pricingVersion = latest.version;
+        updateQuantities();
+        updateCampaign(calculateCustomerQuote({system: 'rhid', schedules: SCHEDULES[0], employees: EMPLOYEES[0]}).campaignActive);
+        recordActivity({}, renderSummary());
+        throw new Error('Os preços foram atualizados. Confira os novos valores e clique novamente para enviar.');
+      }
+    }
     const request = buildCustomerRequest({
       ...selections(),
       contactName: selected('contactName'), company: selected('company'),
@@ -311,8 +356,8 @@ form.addEventListener('submit', async event => {
       taxId: selected('taxId'), paymentMethod: selected('paymentMethod'),
       contactPermission: document.querySelector('#contact-permission').checked,
     });
+    if (connected) request.pricingVersion = pricingVersion;
     if (transportError) throw transportError;
-    setSubmitting(true);
     const receipt = await transport.submit(request, await activity?.link());
     if (!receipt.demo) activity?.complete();
     renderRequestPreview(request, receipt);
@@ -347,6 +392,6 @@ steps.forEach((item, index) => item.querySelector('button').addEventListener('cl
 back.addEventListener('click', () => showStep(Math.max(1, currentStep - 1)));
 document.querySelector('#edit-button').addEventListener('click', () => showStep(1));
 document.querySelector('#restart-button').addEventListener('click', () => showStep(1));
-const campaign = calculateCustomerQuote({system:'rhid', schedules:10, employees:20});
+const campaign = calculateCustomerQuote({system:'rhid', schedules:SCHEDULES[0], employees:EMPLOYEES[0]});
 updateCampaign(campaign.campaignActive);
 showStep(1, false);

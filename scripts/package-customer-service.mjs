@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
-import {PUBLIC_FILES} from './package-customer-preview.mjs';
+import {PUBLIC_FILES, publicFileContent} from './package-customer-preview.mjs';
 import {contactPricing} from './export-contact-pricing.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -15,18 +15,12 @@ export async function packageCustomerService(destination, releaseId) {
   }
   const files = new Map();
   for (const file of PUBLIC_FILES) {
-    const source = ['quote.mjs', 'assets/realponto-30-anos.png'].includes(file) ? 'dist' : 'customer-preview';
-    let bytes = await fs.readFile(path.join(root, source, file));
-    if (file === 'customer-model.mjs') {
-      const text = bytes.toString('utf8');
-      if (text.split("'../dist/quote.mjs'").length !== 3) throw new Error('Imports compartilhados precisam de revisão.');
-      bytes = Buffer.from(text.replaceAll("'../dist/quote.mjs'", "'./quote.mjs'"));
-    }
+    let bytes = await publicFileContent(file, releaseId);
     if (file === 'index.html') {
       const text = bytes.toString('utf8');
       const meta = '<meta name="realponto-api-base" content="">';
-      if (!text.includes(meta) || !text.includes("connect-src 'none'")) throw new Error('Configuração de envio da página não reconhecida.');
-      bytes = Buffer.from(text.replace(meta, '<meta name="realponto-api-base" content="./api/">').replace("connect-src 'none'", "connect-src 'self'"));
+      if (!text.includes(meta) || !text.includes("connect-src 'self'")) throw new Error('Configuração de envio da página não reconhecida.');
+      bytes = Buffer.from(text.replace(meta, '<meta name="realponto-api-base" content="./api/">'));
     }
     files.set('public/' + file, bytes);
   }
@@ -52,7 +46,8 @@ export async function packageCustomerService(destination, releaseId) {
     files.set(name, await fs.readFile(path.join(root, 'customer-service', name)));
   }
   files.set('config/nginx.conf.example', await fs.readFile(path.join(root, 'nginx/contacts-service.conf.example')));
-  files.set('pricing.json', Buffer.from(JSON.stringify(contactPricing(), null, 2) + '\n'));
+  files.set('pricing.json', await fs.readFile(new URL('../customer-service/pricing.json', import.meta.url)));
+  contactPricing(); // Valida antes de permitir que o pacote seja gravado.
   files.set('LEIA-ME-TI.md', await fs.readFile(path.join(root, 'docs/SOLICITACOES-PHP-TI.md')));
   files.set('SINCRONIZACAO-PRECOS.md', await fs.readFile(path.join(root, 'docs/SINCRONIZACAO-PRECOS.md')));
   const manifest = {releaseId, createdAt: new Date().toISOString(), mode: 'php-contact-service', requiresActivation: true,

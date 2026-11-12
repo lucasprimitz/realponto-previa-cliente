@@ -6,11 +6,8 @@ final class Domain {
     public const PAYMENTS = ['pix' => 'Pix — 5% de desconto', 'boleto' => 'Boleto em até 6 parcelas — sob consulta', 'credit-card' => 'Cartão de crédito em até 10 parcelas sem juros'];
     public function __construct(private readonly array $catalog, private readonly string $pricingVersion) {}
     public static function load(): self {
-        $raw = file_get_contents(dirname(__DIR__) . '/pricing.json');
-        if ($raw === false) throw new \RuntimeException('Tabela de preços indisponível.');
-        $data = json_decode($raw, true, 32, JSON_THROW_ON_ERROR);
-        foreach (['pricing', 'campaign', 'schedules', 'employees', 'systems'] as $key) if (!isset($data[$key]) || !is_array($data[$key])) throw new \RuntimeException('Tabela de preços inválida.');
-        return new self($data, hash('sha256', $raw));
+        $pricing = Pricing::load();
+        return new self($pricing->catalog, $pricing->version);
     }
     private static function text(mixed $value, string $label, int $min, int $max): string {
         if (!is_string($value) || strlen($value) > $max * 4 || !preg_match('//u', $value) || preg_match('/[\x00-\x1f\x7f]/u', $value)) throw new Problem(422, "Confira o campo {$label}.");
@@ -21,6 +18,7 @@ final class Domain {
     public function normalize(array $input, ?\DateTimeImmutable $now = null): array {
         $now ??= new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
         if (($input['schemaVersion'] ?? null) !== 1 || ($input['consent'] ?? null) !== true) throw new Problem(422, 'Confira a autorização de contato e os dados enviados.');
+        if (array_key_exists('pricingVersion', $input) && (!is_string($input['pricingVersion']) || !hash_equals($this->pricingVersion, $input['pricingVersion']))) throw new Problem(409, 'A tabela de preços foi atualizada. Atualize a página e confira os valores antes de enviar.');
         $contact = $input['contact'] ?? null; $configuration = $input['configuration'] ?? null; $payment = $input['payment'] ?? null;
         if (!is_array($contact) || !is_array($configuration) || !is_array($payment)) throw new Problem(422, 'Solicitação inválida.');
         $email = self::text($contact['email'] ?? null, 'e-mail', 3, 254);

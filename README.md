@@ -17,16 +17,17 @@ Para o site da empresa, usar o pacote funcional gerado por `scripts/package-cust
 
 ## Preços com uma única origem
 
-As regras são mantidas em `dist/quote.mjs` da branch `main` do simulador interno. A automação de origem transfere para este repositório somente o módulo de cálculo, o JSON de preços do PHP e um registro da versão de origem. O acesso ao repositório interno não precisa ser concedido à TI.
+Os preços, adicionais, campanha e faixas são mantidos em `customer-service/pricing.json` deste projeto. A página aplica essa tabela e o PHP calcula a estimativa usando o mesmo arquivo validado. A API pública de leitura `/api/pricing.php` fornece os parâmetros ao sistema interno.
 
-A sincronização automática exige configuração da credencial `PREVIA_SYNC_TOKEN` no repositório de origem pelo responsável. A entrega do código não comprova sua ativação. Depois de ativada, uma alteração de preços publicada na origem gera uma atualização aqui. A hospedagem precisa receber uma nova versão completa do pacote para que navegador e PHP usem as mesmas regras. Consulte o roteiro de sincronização antes de ativar ou atualizar.
+Uma alteração aprovada no JSON deve ser validada e publicada pelo processo existente de hospedagem. Depois disso, o sistema interno recebe os valores ao consultar novamente a tabela, sem cópia entre repositórios ou GitHub App. Publicar primeiro a adaptação deste projeto e depois a do sistema interno. Consulte o [roteiro da tabela compartilhada](docs/SINCRONIZACAO-PRECOS.md).
 
 ## Organização
 
 - `customer-preview/`: página em quatro etapas, com envio demonstrativo por padrão e integração com a API no pacote funcional.
 - `contacts-panel/`: login, consulta, encaminhamento e observação curta das solicitações.
 - `customer-service/`: serviço PHP, fila de e-mail, regras exportadas, configuração de exemplo e testes.
-- `dist/quote.mjs`: cópia sincronizada das regras de preços; não editar valores diretamente neste repositório.
+- `customer-service/pricing.json`: única fonte editável dos parâmetros comerciais.
+- `dist/quote.mjs` e `dist/pricing-catalog.mjs`: fórmula, validação e consulta da tabela compartilhada.
 - `dist/assets/`: logo usado pela página.
 - `scripts/`: preparação dos pacotes, exportação de preços e atualização da prévia estática.
 - `docs/`: instalação, configuração e sincronização.
@@ -42,7 +43,7 @@ Para abrir a prévia local: `node customer-preview/server.mjs`. O endereço padr
 
 ## Configuração do servidor
 
-A TI ainda precisa definir o endereço HTTPS, configurar PHP, pasta privada persistente, senha, chave de criptografia e envio por SMTP. A credencial da sincronização de preços é diferente das credenciais de hospedagem e e-mail.
+A hospedagem funcional precisa manter HTTPS, PHP, pasta privada persistente, senha, chave de criptografia e envio por SMTP. A consulta compartilhada de preços usa somente dados públicos e dispensa uma credencial entre os projetos.
 
 Publicar somente a pasta `public/` do pacote funcional. Preservar a configuração privada, chave e dados entre versões. Não enviar senhas, tokens, chave, banco, sessões, contatos reais ou credenciais SMTP ao GitHub. O código não inclui segredos de produção.
 

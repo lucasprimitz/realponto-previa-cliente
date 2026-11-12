@@ -105,7 +105,7 @@ find "$STAGE" -type l | grep -q . && fail 'O pacote não pode conter links simb�
 [[ -f "$STAGE/SHA256SUMS" && -f "$STAGE/MANIFESTO-JORNADA.json" ]] || fail 'Manifesto ausente.'
 (cd "$STAGE" && sha256sum --check --status SHA256SUMS) || fail 'Hashes internos do pacote não conferem.'
 grep -Fq "\"release\": \"$SHA\"" "$STAGE/MANIFESTO-JORNADA.json" || fail 'Manifesto não identifica o commit pedido.'
-for f in "$STAGE/public/index.html" "$STAGE/public/api/requests.php" "$STAGE/public/request-transport.mjs" \
+for f in "$STAGE/public/index.html" "$STAGE/public/api/requests.php" "$STAGE/public/api/pricing.php" "$STAGE/public/pricing.json" "$STAGE/public/pricing-catalog.mjs" "$STAGE/public/request-transport.mjs" \
   "$STAGE/private/app/src/Store.php" "$STAGE/private/app/bin/check.php" "$STAGE/private/app/vendor/autoload.php"; do
   [[ -f "$f" ]] || fail "Arquivo obrigatório ausente: ${f#"$STAGE/"}"
 done
@@ -194,6 +194,33 @@ if (!is_array($j) || ($j["ok"]??null)!==true) exit(1);
 ' 
 code="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$WEB/api/requests.php")"
 [[ "$code" == 401 ]] || fail 'Endpoint de contatos não negou acesso sem autenticação.'
+check_pricing_headers() {
+  "$PHP_BIN" -r '
+$headers=[];
+foreach(file($argv[1],FILE_IGNORE_NEW_LINES)?:[] as $line) {
+  $parts=explode(":",$line,2);
+  if(count($parts)===2) $headers[strtolower(trim($parts[0]))][]=trim($parts[1]);
+}
+$types=$headers["content-type"]??[];
+if(count($types)!==1 || !preg_match($argv[2],$types[0])) exit(1);
+if(($argv[3]??"")==="cors" && (($headers["access-control-allow-origin"]??[])!==["*"] || isset($headers["set-cookie"]))) exit(1);
+' "$1" "$2" "${3:-}"
+}
+curl -fsS --max-time 20 -D "$STAGE/pricing-api.headers" -H 'Origin: http://192.168.90.7:8082' "$WEB/api/pricing.php" | "$PHP_BIN" -r '
+$j=json_decode(stream_get_contents(STDIN),true);
+require dirname($argv[1])."/src/Pricing.php";
+$expected=\Realponto\Pricing::load($argv[1])->snapshot();
+if (!is_array($j) || $j!==$expected) exit(1);
+' "$APP/pricing.json"
+check_pricing_headers "$STAGE/pricing-api.headers" '~^application/json(?:\s*;|$)~i' cors || fail 'A consulta pública precisa de JSON, CORS único e nenhuma sessão.'
+curl -fsS --max-time 20 -D "$STAGE/pricing-json.headers" "$WEB/pricing.json?v=$SHA" | "$PHP_BIN" -r '
+$j=json_decode(stream_get_contents(STDIN),true);
+require dirname($argv[1])."/src/Pricing.php";
+if($j!==\Realponto\Pricing::load($argv[1])->snapshot()["catalog"]) exit(1);
+' "$APP/pricing.json"
+check_pricing_headers "$STAGE/pricing-json.headers" '~^application/json(?:\s*;|$)~i' || fail 'O snapshot público de preços precisa ser servido como JSON.'
+curl -fsS --max-time 20 -D "$STAGE/pricing-module.headers" -o /dev/null "$WEB/pricing-catalog.mjs?v=$SHA"
+check_pricing_headers "$STAGE/pricing-module.headers" '~^(?:text|application)/javascript(?:\s*;|$)~i' || fail 'O módulo da tabela precisa ser servido como JavaScript.'
 printf '%s\n' "$SHA" > "$STATE"
 chmod 600 "$STATE"
 DEPLOY_ACTIVE=0

@@ -16,6 +16,7 @@ location ^~ /previa-cliente/ {
         text/html html;
         text/css css;
         text/javascript mjs;
+        application/json json;
         image/png png;
     }
     default_type application/octet-stream;
@@ -31,5 +32,5 @@ location ^~ /previa-cliente/ {
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "no-referrer" always;
     add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
-    add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
+    add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
 }

@@ -1,14 +1,17 @@
-export const SCHEDULES = Object.freeze(Array.from({length: 10}, (_, i) => (i + 1) * 10));
-export const EMPLOYEES = Object.freeze([
+import {validateCatalog} from './pricing-catalog.mjs';
+
+// Referência de contingência. A tabela oficial é carregada da hospedagem.
+export let SCHEDULES = Object.freeze(Array.from({length: 10}, (_, i) => (i + 1) * 10));
+export let EMPLOYEES = Object.freeze([
   ...Array.from({length: 5}, (_, i) => (i + 1) * 20),
   ...Array.from({length: 8}, (_, i) => 150 + i * 50),
   ...Array.from({length: 5}, (_, i) => 600 + i * 100),
 ]);
 
-// Regra inicial ajustável. Valores monetários em centavos.
+// Cópia inicial para contingência. Valores monetários em centavos.
 // Referências: 20 horários + 100 funcionários = R$ 1.520;
 // 30 horários + 100 funcionários = R$ 1.770, sem adicionais.
-export const PRICING = Object.freeze({
+export let PRICING = Object.freeze({
   baseCents: 80000,
   perScheduleCents: 2500,
   perEmployeeCents: 220,
@@ -17,7 +20,7 @@ export const PRICING = Object.freeze({
   secullumPercent: 10,
 });
 
-export const CAMPAIGN = Object.freeze({
+export let CAMPAIGN = Object.freeze({
   discountPercent: 30,
   deadlineISO: '2026-12-15',
   deadlineLabel: '15/12/2026',
@@ -30,6 +33,19 @@ const campaignDateFormatter = new Intl.DateTimeFormat('en-US', {
   month: '2-digit',
   day: '2-digit',
 });
+
+export function getPricingCatalog() {
+  return validateCatalog({pricing: PRICING, campaign: CAMPAIGN, schedules: SCHEDULES, employees: EMPLOYEES});
+}
+export function applyPricingCatalog(value) {
+  const catalog = validateCatalog(value);
+  // Só troca todos os campos depois de validar o conjunto completo.
+  PRICING = catalog.pricing;
+  CAMPAIGN = catalog.campaign;
+  SCHEDULES = catalog.schedules;
+  EMPLOYEES = catalog.employees;
+  return catalog;
+}
 
 export function isCampaignActive(now = new Date()) {
   if (!(now instanceof Date) || Number.isNaN(now.getTime())) return false;

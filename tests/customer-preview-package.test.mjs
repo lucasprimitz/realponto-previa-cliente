@@ -23,7 +23,7 @@ test('pacote isolado mantém os cálculos e carrega todos os recursos dentro de 
   const actual = (await fs.readdir(publicDir, {recursive:true, withFileTypes:true}))
     .filter(entry=>entry.isFile()).map(entry=>path.relative(publicDir,path.join(entry.parentPath,entry.name)).replaceAll('\\','/')).sort();
   assert.deepEqual(actual, [...PUBLIC_FILES].sort());
-  assert.deepEqual(await fs.readFile(path.join(publicDir,'quote.mjs')), await fs.readFile(new URL('../dist/quote.mjs',import.meta.url)));
+  assert.equal((await fs.readFile(path.join(publicDir,'quote.mjs'), 'utf8')).replaceAll('?v=test-preview', ''), await fs.readFile(new URL('../dist/quote.mjs',import.meta.url), 'utf8'));
   const packedModel = await import(pathToFileURL(path.join(publicDir,'customer-model.mjs')).href);
   const beforeDeadline = new Date('2026-11-01T12:00:00-03:00');
   for (const system of ['secullum-offline','secullum-rh','rhid','iponto']) {
@@ -50,7 +50,7 @@ test('pacote isolado mantém os cálculos e carrega todos os recursos dentro de 
   const htmlResponse = await fetch(base);
   assert.equal(htmlResponse.status,200);
   const html = await htmlResponse.text();
-  assert.match(html,/connect-src 'none'/);
+  assert.match(html,/connect-src 'self'/);
   assert.match(html,/form-action 'none'/);
   const references = [...html.matchAll(/(?:href|src)="([^"#][^"]*)"/g)].map(match=>match[1]);
   for (const reference of references) {

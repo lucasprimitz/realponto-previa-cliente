@@ -8,10 +8,10 @@ import {PUBLIC_FILES} from './package-customer-preview.mjs';
 export function createPackagePreviewServer(packageDir) {
   const mount = '/previa-cliente/';
   const allowed = new Set(PUBLIC_FILES);
-  const mime = {'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.png':'image/png'};
+  const mime = {'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.png':'image/png'};
   return createServer(async (req, res) => {
     const headers = {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',
-      'Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"};
+      'Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"};
     const send = (status, body = '', extra = {}) => {
       res.writeHead(status, {...headers, ...extra});
       res.end(req.method === 'HEAD' ? undefined : body);

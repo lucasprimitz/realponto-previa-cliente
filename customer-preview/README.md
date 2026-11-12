@@ -19,7 +19,7 @@ Com Node.js disponível, executar `node customer-preview/server.mjs` a partir da
 
 ## Preços sincronizados
 
-A página importa `../dist/quote.mjs`. Esse arquivo é uma cópia sincronizada das regras mantidas no repositório do simulador interno. As atualizações de preços partem da origem e geram também `customer-service/pricing.json`, usado pelo PHP. Não editar preços diretamente aqui. A sincronização depende da credencial configurada na origem; não é ativada só por copiar o projeto. Veja [Sincronização de preços](../docs/SINCRONIZACAO-PRECOS.md).
+A página importa a fórmula de `../dist/quote.mjs` e aplica os parâmetros de `customer-service/pricing.json`, única tabela editável. No modo conectado, confirma a tabela na API antes de simular e enviar; a prévia demonstrativa usa o snapshot JSON local do pacote. O sistema interno consulta a tabela publicada pela mesma API, sem credencial entre repositórios. Veja [Tabela de preços compartilhada](../docs/SINCRONIZACAO-PRECOS.md).
 
 ## Prévia estática e envio funcional
 

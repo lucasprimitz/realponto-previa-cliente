@@ -1,4 +1,6 @@
+import catalog from '../customer-service/pricing.json' with {type: 'json'};
 import {
+  applyPricingCatalog,
   SCHEDULES,
   EMPLOYEES,
   getQuote,
@@ -6,7 +8,11 @@ import {
   withCampaignDiscount,
 } from '../dist/quote.mjs';
 
-export {SCHEDULES, EMPLOYEES, formatMoney, formatNumber, CAMPAIGN} from '../dist/quote.mjs';
+export {SCHEDULES, EMPLOYEES, formatMoney, formatNumber, CAMPAIGN, applyPricingCatalog, getPricingCatalog} from '../dist/quote.mjs';
+export {loadSharedPricing} from '../dist/pricing-catalog.mjs';
+
+// Um único arquivo editável alimenta a página, a API e os pacotes publicados.
+applyPricingCatalog(catalog);
 
 export const SYSTEMS = Object.freeze([
   Object.freeze({id: 'secullum-offline', name: 'Secullum Offline', secullum: true}),
@@ -21,7 +27,7 @@ const validQuantity = (value, options) => value === 'consultar' || (
   options.includes(Number(value))
 );
 
-// A prévia compartilha os preços e o prazo com o simulador interno.
+// A prévia aplica a tabela canônica; o modo conectado confirma a versão na API.
 export function calculateCustomerQuote({
   system,
   schedules,

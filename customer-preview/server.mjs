@@ -18,6 +18,8 @@ const routes = new Map([
   ['/customer-request.mjs', ['customer-request.mjs', 'text/javascript; charset=utf-8']],
   ['/request-transport.mjs', ['request-transport.mjs', 'text/javascript; charset=utf-8']],
   ['/dist/quote.mjs', ['../dist/quote.mjs', 'text/javascript; charset=utf-8']],
+  ['/dist/pricing-catalog.mjs', ['../dist/pricing-catalog.mjs', 'text/javascript; charset=utf-8']],
+  ['/customer-service/pricing.json', ['../customer-service/pricing.json', 'application/json; charset=utf-8']],
   ['/assets/realponto-30-anos.png', ['../dist/assets/realponto-30-anos.png', 'image/png']],
   ['/assets/lgRP.png', ['assets/lgRP.png', 'image/png']],
 ]);
@@ -26,7 +28,7 @@ const securityHeaders = {
   'Cache-Control': 'no-store',
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
-  'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
 };
 
 const server = createServer(async (request, response) => {

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 ini_set('display_errors', '0');
 require_once __DIR__ . '/Config.php';
+require_once __DIR__ . '/Pricing.php';
 require_once __DIR__ . '/Domain.php';
 require_once __DIR__ . '/Activity.php';
 require_once __DIR__ . '/AccessContext.php';

@@ -101,11 +101,11 @@ test('Linux: publicação, no-op, falha de teste, rollback HTTP, nova tentativa 
   await fs.writeFile(path.join(root, 'releases', 'manual', 'public', 'index.html'), 'manual version');
   await fs.symlink('releases/manual', path.join(root, 'current'));
   const paths = [
-    ...PUBLIC_FILES.map(file => ['quote.mjs', 'assets/realponto-30-anos.png'].includes(file) ? `dist/${file}` : `customer-preview/${file}`),
+    ...PUBLIC_FILES.map(file => file === 'pricing.json' ? 'customer-service/pricing.json' : ['quote.mjs', 'pricing-catalog.mjs', 'assets/realponto-30-anos.png'].includes(file) ? `dist/${file}` : `customer-preview/${file}`),
     'customer-preview/customer-model.test.mjs', 'customer-preview/customer-request.test.mjs', 'customer-preview/request-transport.test.mjs',
     'customer-preview/hosting/apache-previa-cliente.conf.example', 'customer-preview/hosting/nginx-previa-cliente.conf.example',
     'scripts/package-customer-preview.mjs', 'scripts/preview-customer-package.mjs',
-    'scripts/check-pricing-sync.mjs', 'scripts/export-contact-pricing.mjs', 'customer-service/pricing.json', 'pricing-sync.json',
+    'scripts/check-pricing-sync.mjs', 'scripts/export-contact-pricing.mjs',
     'tests/quote.test.mjs', 'tests/customer-preview-package.test.mjs', 'docs/PREVIA-CLIENTE-TI.md', 'docs/ATUALIZACAO-AUTOMATICA-PREVIA.md',
   ];
   for (const relative of paths) {
@@ -124,7 +124,7 @@ test('Linux: publicação, no-op, falha de teste, rollback HTTP, nova tentativa 
       const requestPath = new URL(req.url, 'http://localhost').pathname;
       const file = requestPath === '/previa-cliente/' ? 'index.html' : requestPath.slice('/previa-cliente/'.length);
       assert.ok(PUBLIC_FILES.includes(file));
-      const type = file.endsWith('.mjs') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : file.endsWith('.png') ? 'image/png' : 'text/html';
+      const type = file.endsWith('.mjs') ? 'text/javascript' : file.endsWith('.json') ? 'application/json' : file.endsWith('.css') ? 'text/css' : file.endsWith('.png') ? 'image/png' : 'text/html';
       const bytes = await fs.readFile(path.join(root, 'current', 'public', file));
       res.writeHead(200, {'Content-Type': type});
       res.end(httpFailure && file === 'quote.mjs' ? 'wrong version' : bytes);

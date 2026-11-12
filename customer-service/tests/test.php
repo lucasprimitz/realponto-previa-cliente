@@ -34,12 +34,12 @@ function checkAccessContext(Config $config): void {
     }
 }
 checkAccessContext($config);
-$input = ['schemaVersion' => 1, 'createdAt' => '1900-01-01', 'contact' => ['name' => 'Cliente de Teste', 'company' => 'Empresa de Teste', 'email' => 'teste@example.invalid', 'phone' => '(11) 99999-9999', 'taxId' => '123.456.789-09'], 'configuration' => ['system' => 'iponto', 'schedules' => 10, 'employees' => 40, 'bankHours' => true, 'workScale' => false], 'payment' => ['method' => 'pix', 'label' => 'forged'], 'estimate' => ['totalCents' => 1], 'consent' => true];
 $catalog = json_decode(file_get_contents(dirname(__DIR__) . '/pricing.json'), true, 64, JSON_THROW_ON_ERROR);
+$input = ['schemaVersion' => 1, 'createdAt' => '1900-01-01', 'contact' => ['name' => 'Cliente de Teste', 'company' => 'Empresa de Teste', 'email' => 'teste@example.invalid', 'phone' => '(11) 99999-9999', 'taxId' => '123.456.789-09'], 'configuration' => ['system' => 'iponto', 'schedules' => $catalog['schedules'][0], 'employees' => $catalog['employees'][0], 'bankHours' => true, 'workScale' => false], 'payment' => ['method' => 'pix', 'label' => 'forged'], 'estimate' => ['totalCents' => PHP_INT_MAX], 'consent' => true];
 $now = new DateTimeImmutable($catalog['campaign']['deadlineISO'] . 'T12:00:00-03:00');
 $request = $domain->normalize($input, $now);
 $pricing = $catalog['pricing'];
-$base = $pricing['baseCents'] + 10 * $pricing['perScheduleCents'] + 40 * $pricing['perEmployeeCents'];
+$base = $pricing['baseCents'] + $input['configuration']['schedules'] * $pricing['perScheduleCents'] + $input['configuration']['employees'] * $pricing['perEmployeeCents'];
 $withBank = $base + (int)round($base * $pricing['bankHoursPercent'] / 100);
 $expectedTotal = $withBank - (int)round($withBank * $catalog['campaign']['discountPercent'] / 100);
 check($request['estimate']['totalCents'] === $expectedTotal, 'O preço do navegador não pode ser confiado.');
@@ -68,7 +68,7 @@ $withoutDocument = $input; unset($withoutDocument['contact']['taxId']);
 check($domain->normalize($withoutDocument, $now)['contact']['taxId'] === null, 'Documento ausente não pode impedir o envio.');
 foreach (['email' => "a@example.invalid\r\nBcc: evil@example.invalid", 'name' => str_repeat('a', 121)] as $key => $value) { $bad = $input; $bad['contact'][$key] = $value; problem(fn() => $domain->normalize($bad), 422); }
 $bad = $input; $bad['configuration']['bankHours'] = 'false'; problem(fn() => $domain->normalize($bad), 422);
-$bad = $input; $bad['configuration']['schedules'] = 11; problem(fn() => $domain->normalize($bad), 422);
+$bad = $input; $bad['configuration']['schedules'] = max($catalog['schedules']) + 1; problem(fn() => $domain->normalize($bad), 422);
 $bad = $input; $bad['configuration']['system'] = 'x'; problem(fn() => $domain->normalize($bad), 422);
 $bad = $input; $bad['consent'] = false; problem(fn() => $domain->normalize($bad), 422);
 $created = $store->create($request, str_repeat('a', 32));
@@ -131,7 +131,7 @@ foreach (['boleto' => [6, 'boletoInstallmentCents', 'Boleto em 6 parcelas — so
 }
 foreach (['secullum-offline', 'secullum-rh', 'rhid', 'iponto'] as $system) {
     foreach (array_keys(Domain::PAYMENTS) as $method) {
-        foreach ([10, 'consultar'] as $schedules) {
+        foreach ([$catalog['schedules'][0], 'consultar'] as $schedules) {
             $sample = $input;
             $sample['configuration']['system'] = $system;
             $sample['configuration']['schedules'] = $schedules;

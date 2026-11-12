@@ -6,11 +6,8 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 
 export const BRANCH = 'main';
-export const PUBLIC_FILES = Object.freeze([
-  'index.html', 'preview.css', 'app.mjs', 'customer-model.mjs',
-  'customer-request.mjs', 'request-transport.mjs', 'activity.mjs', 'quote.mjs', 'assets/realponto-30-anos.png',
-  'assets/lgRP.png',
-]);
+export {PUBLIC_FILES} from './package-customer-preview.mjs';
+import {PUBLIC_FILES} from './package-customer-preview.mjs';
 const METADATA = 'preview-deployment.json';
 const MAX_BYTES = 32 * 1024 * 1024;
 const execFileAsync = promisify(execFile);
@@ -138,7 +135,7 @@ async function switchCurrent(root, target) {
 
 export async function verifyHealth(healthUrl, files, timeoutMs = 15000) {
   const mime = file => file.endsWith('.mjs') ? /^(?:text|application)\/javascript(?:;|$)/i
-    : file.endsWith('.css') ? /^text\/css(?:;|$)/i
+    : file.endsWith('.json') ? /^application\/json(?:;|$)/i : file.endsWith('.css') ? /^text\/css(?:;|$)/i
       : file.endsWith('.png') ? /^image\/png(?:;|$)/i : /^text\/html(?:;|$)/i;
   const signal = AbortSignal.timeout(timeoutMs);
   for (const [file, expected] of files) {
