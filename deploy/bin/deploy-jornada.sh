@@ -105,7 +105,7 @@ find "$STAGE" -type l | grep -q . && fail 'O pacote não pode conter links simb�
 [[ -f "$STAGE/SHA256SUMS" && -f "$STAGE/MANIFESTO-JORNADA.json" ]] || fail 'Manifesto ausente.'
 (cd "$STAGE" && sha256sum --check --status SHA256SUMS) || fail 'Hashes internos do pacote não conferem.'
 grep -Fq "\"release\": \"$SHA\"" "$STAGE/MANIFESTO-JORNADA.json" || fail 'Manifesto não identifica o commit pedido.'
-for f in "$STAGE/public/index.html" "$STAGE/public/api/requests.php" "$STAGE/public/api/pricing.php" "$STAGE/public/pricing.json" "$STAGE/public/pricing-catalog.mjs" "$STAGE/public/request-transport.mjs" \
+for f in "$STAGE/public/index.html" "$STAGE/public/api/requests.php" "$STAGE/public/api/pricing.php" "$STAGE/public/pricing-public.json" "$STAGE/public/pricing-catalog.mjs" "$STAGE/public/request-transport.mjs" \
   "$STAGE/private/app/src/Store.php" "$STAGE/private/app/bin/check.php" "$STAGE/private/app/vendor/autoload.php"; do
   [[ -f "$f" ]] || fail "Arquivo obrigatório ausente: ${f#"$STAGE/"}"
 done
@@ -213,7 +213,7 @@ $expected=\Realponto\Pricing::load($argv[1])->snapshot();
 if (!is_array($j) || $j!==$expected) exit(1);
 ' "$APP/pricing.json"
 check_pricing_headers "$STAGE/pricing-api.headers" '~^application/json(?:\s*;|$)~i' cors || fail 'A consulta pública precisa de JSON, CORS único e nenhuma sessão.'
-curl -fsS --max-time 20 -D "$STAGE/pricing-json.headers" "$WEB/pricing.json?v=$SHA" | "$PHP_BIN" -r '
+curl -fsS --max-time 20 -D "$STAGE/pricing-json.headers" "$WEB/pricing-public.json?v=$SHA" | "$PHP_BIN" -r '
 $j=json_decode(stream_get_contents(STDIN),true);
 require dirname($argv[1])."/src/Pricing.php";
 if($j!==\Realponto\Pricing::load($argv[1])->snapshot()["catalog"]) exit(1);

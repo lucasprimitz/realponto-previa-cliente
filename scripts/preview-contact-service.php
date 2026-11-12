@@ -9,7 +9,7 @@ $routes = [
     '/customer-request.mjs' => 'customer-request.mjs', '/request-transport.mjs' => 'request-transport.mjs',
     '/activity.mjs' => 'activity.mjs', '/assets/lgRP.png' => 'assets/lgRP.png',
     '/quote.mjs' => 'quote.mjs', '/assets/realponto-30-anos.png' => 'assets/realponto-30-anos.png',
-    '/pricing-catalog.mjs' => 'pricing-catalog.mjs', '/pricing.json' => 'pricing.json',
+    '/pricing-catalog.mjs' => 'pricing-catalog.mjs', '/pricing-public.json' => 'pricing-public.json',
     '/contatos/' => 'contatos/index.html', '/contatos/index.html' => 'contatos/index.html',
     '/contatos/panel.css' => 'contatos/panel.css', '/contatos/panel.mjs' => 'contatos/panel.mjs',
     '/contatos/panel-model.mjs' => 'contatos/panel-model.mjs',

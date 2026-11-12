@@ -101,7 +101,7 @@ test('Linux: publicação, no-op, falha de teste, rollback HTTP, nova tentativa 
   await fs.writeFile(path.join(root, 'releases', 'manual', 'public', 'index.html'), 'manual version');
   await fs.symlink('releases/manual', path.join(root, 'current'));
   const paths = [
-    ...PUBLIC_FILES.map(file => file === 'pricing.json' ? 'customer-service/pricing.json' : ['quote.mjs', 'pricing-catalog.mjs', 'assets/realponto-30-anos.png'].includes(file) ? `dist/${file}` : `customer-preview/${file}`),
+    ...PUBLIC_FILES.map(file => file === 'pricing-public.json' ? 'customer-service/pricing.json' : ['quote.mjs', 'pricing-catalog.mjs', 'assets/realponto-30-anos.png'].includes(file) ? `dist/${file}` : `customer-preview/${file}`),
     'customer-preview/customer-model.test.mjs', 'customer-preview/customer-request.test.mjs', 'customer-preview/request-transport.test.mjs',
     'customer-preview/hosting/apache-previa-cliente.conf.example', 'customer-preview/hosting/nginx-previa-cliente.conf.example',
     'scripts/package-customer-preview.mjs', 'scripts/preview-customer-package.mjs',

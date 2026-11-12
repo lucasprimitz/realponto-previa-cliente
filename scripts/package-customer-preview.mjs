@@ -8,19 +8,20 @@ import {validateCatalog} from '../dist/pricing-catalog.mjs';
 const project = fileURLToPath(new URL('../', import.meta.url));
 export const PUBLIC_FILES = Object.freeze([
   'index.html', 'preview.css', 'app.mjs', 'customer-model.mjs',
-  'customer-request.mjs', 'request-transport.mjs', 'activity.mjs', 'quote.mjs', 'pricing-catalog.mjs', 'pricing.json', 'assets/realponto-30-anos.png',
+  'customer-request.mjs', 'request-transport.mjs', 'activity.mjs', 'quote.mjs', 'pricing-catalog.mjs', 'pricing-public.json', 'assets/realponto-30-anos.png',
   'assets/lgRP.png',
 ]);
 const sha256 = content => createHash('sha256').update(content).digest('hex');
 
 export async function publicFileContent(relative, releaseId = '') {
-  if (relative === 'pricing.json') return Buffer.from(JSON.stringify(validateCatalog(contactPricing()), null, 2) + '\n');
+  // O nome privado pricing.json é bloqueado pela configuração da HostGator.
+  if (relative === 'pricing-public.json') return Buffer.from(JSON.stringify(validateCatalog(contactPricing()), null, 2) + '\n');
   const source = ['quote.mjs', 'pricing-catalog.mjs', 'assets/realponto-30-anos.png'].includes(relative) ? 'dist' : 'customer-preview';
   let content = await fs.readFile(path.join(project, source, relative));
   if (relative === 'customer-model.mjs') {
     const text = content.toString('utf8');
     if (!text.includes("'../customer-service/pricing.json'") || !text.includes("'../dist/quote.mjs'")) throw new Error('Revisar os imports da tabela compartilhada antes de empacotar.');
-    content = Buffer.from(text.replaceAll("'../dist/quote.mjs'", "'./quote.mjs'").replaceAll("'../dist/pricing-catalog.mjs'", "'./pricing-catalog.mjs'").replaceAll("'../customer-service/pricing.json'", "'./pricing.json'"));
+    content = Buffer.from(text.replaceAll("'../dist/quote.mjs'", "'./quote.mjs'").replaceAll("'../dist/pricing-catalog.mjs'", "'./pricing-catalog.mjs'").replaceAll("'../customer-service/pricing.json'", "'./pricing-public.json'"));
   }
   if (releaseId && relative.endsWith('.mjs')) {
     content = Buffer.from(content.toString('utf8').replace(/(['"])(\.{1,2}\/[^'"?]+\.(?:mjs|json))\1/g, (_, quote, file) => quote + file + '?v=' + encodeURIComponent(releaseId) + quote));

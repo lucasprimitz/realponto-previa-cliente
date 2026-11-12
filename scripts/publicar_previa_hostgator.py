@@ -34,7 +34,7 @@ STATE_LIMIT = 4 * 1024 * 1024
 SITE_ID = 'realponto-previa-cliente'
 PAGES = {
     'index.html', 'preview.css', 'app.mjs', 'customer-model.mjs',
-    'customer-request.mjs', 'request-transport.mjs', 'activity.mjs', 'quote.mjs', 'pricing-catalog.mjs', 'pricing.json',
+    'customer-request.mjs', 'request-transport.mjs', 'activity.mjs', 'quote.mjs', 'pricing-catalog.mjs', 'pricing-public.json',
 }
 TREE_TYPES = {
     'assets': {'.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif', '.svg', '.ico'},

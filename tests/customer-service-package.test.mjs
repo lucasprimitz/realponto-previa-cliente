@@ -36,7 +36,11 @@ test('pacote funcional separa o PHP e os segredos dos arquivos públicos e prese
   assert.ok(manifest.files.some(item => item.file === 'public/activity.mjs'));
   assert.ok(manifest.files.some(item => item.file === 'public/api/request-archive.php'));
   assert.ok(manifest.files.some(item => item.file === 'public/api/pricing.php'));
-  const publicPricing = JSON.parse(await fs.readFile(path.join(output, 'public/pricing.json'), 'utf8'));
+  const publicPricing = JSON.parse(await fs.readFile(path.join(output, 'public/pricing-public.json'), 'utf8'));
+  await assert.rejects(fs.access(path.join(output, 'public/pricing.json')), {code: 'ENOENT'});
+  const model = await fs.readFile(path.join(output, 'public/customer-model.mjs'), 'utf8');
+  assert.match(model, /\.\/pricing-public\.json\?v=/);
+  assert.doesNotMatch(model, /\.\/pricing\.json/);
   assert.equal('systems' in publicPricing, false);
   assert.deepEqual(publicPricing.pricing, contactPricing().pricing);
   assert.deepEqual(await fs.readFile(path.join(output, 'pricing.json')), await fs.readFile(new URL('../customer-service/pricing.json', import.meta.url)));
