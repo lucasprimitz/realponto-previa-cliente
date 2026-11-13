@@ -17,6 +17,7 @@ const state = {authenticated: false, csrfToken: '', page: 1, totalPages: 1, busy
 const activityPagination = {page: 1, totalPages: 1};
 const activityMonth = $('#activity-month');
 const dailyViewToggle = $('#calendar-chart-toggle');
+let dailyChartObserver;
 let dailyFlip = null;
 const monthFormat = new Intl.DateTimeFormat('pt-BR', {year: 'numeric', month: 'long', timeZone: 'UTC'});
 const views = {
@@ -449,6 +450,7 @@ async function loadActiveView(reset = false) {
   return loadRequests(reset ? 1 : state.page);
 }
 function clearSimulationActivity() {
+  dailyChartObserver?.disconnect();
   activityPagination.page = 1;
   activityPagination.totalPages = 1;
   $('#activity-status').textContent = '';
@@ -602,6 +604,7 @@ const hourLabel = hour => String(hour).padStart(2, '0') + 'h';
 const browserCount = n => n.toLocaleString('pt-BR') + (n === 1 ? ' navegador' : ' navegadores');
 
 function trafficStatus(message) {
+  dailyChartObserver?.disconnect();
   resetDailyCard();
   dailyViewToggle.disabled = true;
   for (const selector of ['#calendar-content', '#traffic-content']) {
@@ -622,6 +625,7 @@ function chartSvg(name, attributes) {
 }
 
 function renderDailyBarChart(month, traffic, today, startDay, partialStartDay) {
+  dailyChartObserver?.disconnect();
   const days = traffic.days.filter(day => day.date <= today);
   const figure = textElement('figure', 'daily-bar-chart', '');
   const monthName = monthFormat.format(new Date(month + '-01T00:00:00Z'));
@@ -638,11 +642,10 @@ function renderDailyBarChart(month, traffic, today, startDay, partialStartDay) {
   const labelFor = n => n < 1000 ? String(n) : compact.format(n);
   // Coordinates are percentages of the plot; text and corner radii stay in pixels.
   const baseline = 97;
-  const barHeight = value => 85 * value / limit;
+  const barHeight = value => 80 * value / limit;
 
   const frame = textElement('div', 'daily-bar-frame', '');
   frame.append(textElement('span', 'daily-bar-axis-name', 'Navegadores'));
-  const layout = textElement('div', 'daily-bar-layout', '');
   const axis = chartSvg('svg', {class: 'daily-bar-axis', 'aria-hidden': 'true'});
   const guides = chartSvg('svg', {class: 'daily-bar-guides', 'aria-hidden': 'true'});
   for (const n of ticks) {
@@ -653,22 +656,21 @@ function renderDailyBarChart(month, traffic, today, startDay, partialStartDay) {
     guides.append(chartSvg('line', {class: n ? 'guide' : 'baseline', x1: 0, x2: '100%', y1: y, y2: y}));
   }
 
-  const scroll = textElement('div', 'daily-bar-scroll', '');
-  scroll.tabIndex = 0;
-  scroll.setAttribute('role', 'region');
-  scroll.setAttribute('aria-label', 'Acessos por dia em ' + monthName);
-  const canvas = textElement('div', 'daily-bar-canvas', '');
-  const series = textElement('ol', 'daily-bar-series', '');
-  if (max >= 1000) series.classList.add('large-counts');
+  const rows = textElement('div', 'daily-bar-rows', '');
+  rows.setAttribute('role', 'region');
+  rows.setAttribute('aria-label', 'Acessos por dia em ' + monthName);
+  const bars = [];
   for (const {date, browsers} of days) {
     const missing = missingDailyCount(date, browsers, traffic, today, startDay, partialStartDay);
     const peak = !missing && browsers > 0 && browsers === max;
     const day = textElement('li', 'daily-bar-day', '');
     day.dataset.date = date;
-    day.dataset.weekday = new Date(date + 'T00:00:00Z').getUTCDay();
+    const weekdayIndex = new Date(date + 'T00:00:00Z').getUTCDay();
+    const weekday = weekdays[weekdayIndex];
+    day.dataset.weekday = weekdayIndex;
     day.classList.toggle('unavailable', Boolean(missing));
     day.classList.toggle('peak', peak);
-    const detail = date.slice(-2) + '/' + date.slice(5, 7) + ' · ' + (missing || browserCount(browsers)) +
+    const detail = date.slice(-2) + '/' + date.slice(5, 7) + ' · ' + weekday + ' · ' + (missing || browserCount(browsers)) +
       (peak ? ' · Maior movimento no mês' : '');
     day.title = detail;
     const plot = chartSvg('svg', {class: 'daily-bar-mark', 'aria-hidden': 'true'});
@@ -676,23 +678,47 @@ function renderDailyBarChart(month, traffic, today, startDay, partialStartDay) {
     const y = (baseline - height) + '%';
     if (!missing) {
       day.dataset.browsers = browsers;
-      plot.append(chartSvg('rect', {class: 'daily-bar', 'data-browsers': browsers, x: '25%', width: '50%', y, height: height + '%', rx: 3}));
+      plot.append(chartSvg('rect', {class: 'daily-bar', 'data-browsers': browsers, x: '29%', width: '42%', y, height: height + '%', rx: 3}));
     }
-    const value = chartSvg('text', {class: 'daily-bar-value', x: '50%', y, dy: -6, 'text-anchor': 'middle'});
+    const value = chartSvg('text', {class: 'daily-bar-value', x: '50%', y, dy: -4, 'text-anchor': 'middle'});
     value.textContent = missing ? '—' : labelFor(browsers);
     plot.append(value);
-    const time = textElement('time', '', date.slice(-2));
+    const time = textElement('time', '', '');
+    time.append(textElement('span', 'daily-bar-date', date.slice(-2)), textElement('span', 'daily-bar-weekday', weekday.slice(0, 3)));
     time.dateTime = date;
     time.setAttribute('aria-hidden', 'true');
     if (date === today) time.setAttribute('aria-current', 'date');
     day.append(plot, time, textElement('span', 'sr-only', detail));
-    series.append(day);
+    bars.push(day);
   }
 
-  canvas.append(guides, series);
-  layout.append(axis, canvas);
-  scroll.append(layout);
-  frame.append(scroll, textElement('p', 'daily-bar-day-axis', 'Dia do mês'));
+  let lastColumns = 0;
+  dailyChartObserver = new ResizeObserver(([entry]) => {
+    const width = entry.contentRect.width;
+    if (!width) return;
+    const style = getComputedStyle(rows);
+    const axisWidth = parseFloat(style.getPropertyValue('--axis-width'));
+    const columnWidth = Math.max(parseFloat(style.getPropertyValue('--min-column-width')), max >= 1000 ? 58 : 0);
+    const capacity = Math.max(1, Math.floor((width - axisWidth) / columnWidth));
+    const columns = Math.ceil(bars.length / Math.ceil(bars.length / capacity));
+    if (columns === lastColumns) return;
+    lastColumns = columns;
+    rows.style.setProperty('--chart-columns', columns);
+    const lines = [];
+    for (let i = 0; i < bars.length; i += columns) {
+      const layout = textElement('div', 'daily-bar-layout', '');
+      const canvas = textElement('div', 'daily-bar-canvas', '');
+      const series = textElement('ol', 'daily-bar-series', '');
+      series.start = i + 1;
+      series.append(...bars.slice(i, i + columns));
+      canvas.append(guides.cloneNode(true), series);
+      layout.append(axis.cloneNode(true), canvas);
+      lines.push(layout);
+    }
+    rows.replaceChildren(...lines);
+  });
+  dailyChartObserver.observe(rows);
+  frame.append(rows, textElement('p', 'daily-bar-day-axis', 'Dia do mês'));
   figure.append(frame);
   return figure;
 }
@@ -826,7 +852,7 @@ function setDailyFace(showChart) {
   const chart = $('#calendar-chart');
   if (grid && chart) {
     grid.inert = showChart;
-    chart.hidden = !showChart;
+    chart.inert = !showChart;
   }
   const action = showChart ? 'Voltar ao calendário' : 'Ver gráfico de barras';
   dailyViewToggle.setAttribute('aria-label', action);
@@ -843,7 +869,7 @@ function resetDailyCard() {
 function flipDailyCard() {
   if (dailyFlip || dailyViewToggle.disabled) return;
   const card = $('#activity-calendar');
-  const showChart = $('#calendar-chart').hidden;
+  const showChart = $('#calendar-chart').inert;
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !card.animate) {
     setDailyFace(showChart);
     return;

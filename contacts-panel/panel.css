@@ -258,11 +258,12 @@ summary.activity-summary:hover, .activity-card details[open] > summary { backgro
 .traffic-message { padding: 16px; background: #f5f6fa; border-radius: 9px; }
 .traffic-coverage { margin: 12px 0; padding: 10px 14px; border-left: 3px solid #c18c33; background: #fff8e9; color: #664b20; font-size: 13px; }
 #activity-calendar { max-width: 740px; margin-inline: auto; }
-/* The calendar sets the height on both faces, including months with six weeks. */
-.daily-card-faces { position: relative; }
+/* Both faces size the card, including when the chart needs several rows. */
+.daily-card-faces { display: grid; grid-template-columns: minmax(0, 1fr); }
+#calendar-grid, #calendar-chart { grid-area: 1 / 1; min-width: 0; }
 #calendar-grid { display: flow-root; }
-#calendar-grid[inert] { visibility: hidden; }
-#calendar-chart { position: absolute; inset: 0; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); }
+#calendar-chart { display: grid; grid-template-columns: minmax(0, 1fr); }
+.daily-card-faces > [inert] { visibility: hidden; }
 .daily-view-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .daily-view-header h2 { margin: 0; }
 .daily-view-toggle {
@@ -340,31 +341,41 @@ summary.activity-summary:hover, .activity-card details[open] > summary { backgro
   .traffic-peaks { grid-template-columns: 1fr; gap: 8px; }
 }
 
-.daily-bar-chart { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; margin: 0; }
+.daily-bar-chart { display: grid; grid-template-rows: auto 1fr; min-width: 0; margin: 0; }
 .daily-bar-chart figcaption { margin: 0 0 12px; color: var(--deep); font-size: 17px; font-weight: 700; }
 .daily-bar-frame {
-  display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0;
+  display: grid; grid-template-rows: auto 1fr auto; min-width: 0;
   padding: 14px 14px 10px 8px; border: 1px solid var(--border); border-radius: 12px;
   background: #fbfbfe; font-variant-numeric: tabular-nums;
 }
 .daily-bar-axis-name, .daily-bar-day-axis { color: var(--muted); font-size: 12px; }
 .daily-bar-axis-name { margin-left: 4px; }
 .daily-bar-day-axis { margin: 8px 0 0; text-align: center; }
-.daily-bar-layout {
-  --day-label-height: 1.75rem;
-  display: flex; width: max-content; min-width: 100%; height: 100%;
+.daily-bar-rows {
+  --axis-width: 44px;
+  --min-column-width: 42px;
+  --date-tile-size: 38px;
+  --day-label-height: calc(var(--date-tile-size) + 12px);
+  display: grid; grid-auto-rows: minmax(calc(var(--day-label-height) + 104px), 1fr);
+  min-width: 0; gap: 10px;
 }
-.daily-bar-scroll { min-width: 0; min-height: 0; overflow-x: auto; overscroll-behavior-x: contain; }
-.daily-bar-canvas { position: relative; flex: 1 0 auto; }
-.daily-bar-series { position: relative; display: flex; height: 100%; list-style: none; margin: 0; padding: 0; }
+.daily-bar-layout {
+  position: relative; display: grid; grid-template-columns: var(--axis-width) minmax(0, 1fr);
+  min-width: 0; min-height: 0;
+}
+.daily-bar-canvas { position: relative; grid-column: 2; min-width: 0; }
+.daily-bar-series {
+  position: absolute; inset: 0; display: grid;
+  grid-template-columns: repeat(var(--chart-columns, 1), minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr);
+  list-style: none; margin: 0; padding: 0;
+}
 .daily-bar-day {
-  flex: 1 0 19px; width: 19px; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr);
+  min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) var(--day-label-height); justify-items: center; font-size: 12px;
 }
-.daily-bar-series.large-counts .daily-bar-day { flex-basis: 58px; width: 58px; }
 .daily-bar-axis, .daily-bar-guides, .daily-bar-mark { display: block; width: 100%; stroke: none; }
 .daily-bar-axis, .daily-bar-guides { height: calc(100% - var(--day-label-height)); }
-.daily-bar-axis { position: sticky; left: 0; z-index: 1; flex: 0 0 3rem; width: 3rem; background: #fbfbfe; }
+.daily-bar-axis { position: absolute; top: 0; left: 0; width: var(--axis-width); }
 .daily-bar-guides { position: absolute; inset: 0 0 auto; }
 .daily-bar-guides .guide { stroke: #d7d8e7; stroke-width: 1; stroke-dasharray: 3 4; }
 .daily-bar-guides .baseline { stroke: #b9bbce; stroke-width: 1; }
@@ -375,12 +386,22 @@ summary.activity-summary:hover, .activity-card details[open] > summary { backgro
 .daily-bar-day.peak .daily-bar { fill: var(--blue); }
 .daily-bar-day.peak .daily-bar-value { font-weight: 800; }
 .daily-bar-day.unavailable .daily-bar-value { fill: var(--muted); }
-.daily-bar-day time { padding: 2px 0 4px; color: var(--muted); font-weight: 550; }
-.daily-bar-day[data-weekday="0"] time { color: #9f233b; }
-.daily-bar-day[data-weekday="6"] time { color: #195594; }
-.daily-bar-day time[aria-current="date"] { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.daily-bar-day time {
+  display: grid; place-items: center; align-content: center; gap: 3px;
+  width: var(--date-tile-size); height: var(--date-tile-size); margin-top: 6px;
+  border: 1px solid var(--badge-border, #dedfea); border-radius: 8px;
+  background: var(--badge-fill, #f0f0f7); color: var(--muted); line-height: 1;
+}
+.daily-bar-date { font-size: 14px; font-weight: 650; }
+.daily-bar-weekday { font-size: 11px; font-weight: 550; text-transform: capitalize; }
+.daily-bar-day[data-weekday="0"] time { color: #9f233b; --badge-border: #e9bbc4; --badge-fill: #fde6e9; }
+.daily-bar-day[data-weekday="6"] time { color: #195594; --badge-border: #b7d1ed; --badge-fill: #e1edfc; }
+.daily-bar-day time[aria-current="date"] {
+  color: #22613e; --badge-border: #97cbab; --badge-fill: #e2f4e8;
+}
+.daily-bar-day time[aria-current="date"] .daily-bar-date { font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
 @media (max-width: 480px) {
+  .daily-bar-rows { --date-tile-size: 34px; --axis-width: 36px; --min-column-width: 38px; }
+  .daily-bar { x: 33%; width: 34%; }
   .daily-bar-frame { padding-inline: 4px 8px; }
-  .daily-bar-axis { flex-basis: 2.4rem; width: 2.4rem; }
-  .daily-bar-day { flex-basis: 23px; width: 23px; }
 }
