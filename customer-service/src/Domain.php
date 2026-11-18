@@ -84,5 +84,5 @@ final class Domain {
         $final = $total - $discount;
         return array_merge($base, ['status' => 'priced', 'totalCents' => $final, 'totalBeforeDiscountCents' => $total, 'discountCents' => $discount, 'campaignDiscountApplied' => $active, 'pixCents' => self::percent($final, 95), 'boletoInstallmentCents' => intdiv($final + 3, 6), 'cardInstallmentCents' => intdiv($final + 5, 10)]);
     }
-    public static function note(mixed $value): string { return self::text($value, 'responsável / observação', 0, 160); }
+    public static function note(mixed $value): string { return self::text($value, 'observação', 0, 160); }
 }

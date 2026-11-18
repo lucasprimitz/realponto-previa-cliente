@@ -361,7 +361,14 @@ try {
   for(const invalidYear of ['abc','1999','2101','2026.5','2026&year[]=2027']) check((await admin.call('reports.php?year='+invalidYear)).status,422,'Ano inválido rejeitado');
   check((await admin.call('reports.php',{method:'POST',data:{year:Number(reportYear)}})).status,405,'Relatório somente leitura');
   check((await admin.call('request-update.php',{method:'POST',data:{id:item.id,handled:true,note:'Ana',version:1},headers:{'X-CSRF-Token':oldCsrf}})).status,403,'Token anterior revogado');
-  result=await admin.call('request-update.php',{method:'POST',data:{id:item.id,handled:true,note:'Ana',version:1}}); check(result.status,200,'Acompanhamento salvo'); check(result.body.item.version,2,'Versão avança');
+  result=await admin.call('request-update.php',{method:'POST',data:{id:item.id,handled:true,note:'Ana',assignee:'V. NEVES',version:1}}); check(result.status,200,'Acompanhamento salvo'); check(result.body.item.version,2,'Versão avança');
+  check(result.body.item.assignee,'V. NEVES','Resposta identifica o responsável confirmado');
+  assert.ok(Number.isFinite(Date.parse(result.body.item.handledAt))); checks++;
+  check(result.body.assignment.next,'MARIA EDUARDA','A próxima sugestão considera a escolha confirmada');
+  check((await admin.call('requests.php')).body.assignment.next,'MARIA EDUARDA','A lista usa a mesma fila após recarregar');
+  const assigned=(await admin.call('reports.php?year='+reportYear)).body.assignmentTotals.find(row=>row.assignee==='V. NEVES');
+  check(assigned.count,1,'Carteira inclui o encaminhamento');
+  check(assigned.estimatedCents,item.request.estimate.pixCents,'Carteira HTTP soma o valor Pix selecionado');
   check((await admin.call('request-update.php',{method:'POST',data:{id:item.id,handled:false,note:'',version:1}})).status,409,'Alteração concorrente não sobrescreve');
   check((await admin.call('requests.php?status=pending')).body.total,0,'Filtro pendentes'); check((await admin.call('requests.php?status=handled')).body.total,1,'Filtro encaminhados');
 

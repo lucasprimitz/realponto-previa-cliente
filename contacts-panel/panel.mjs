@@ -9,7 +9,8 @@ const loginButton = $('#login-button');
 const password = $('#password');
 const message = $('#status-message');
 const filter = $('#status-filter');
-filter.value = 'all';
+const defaultRequestFilter = filter.querySelector('option[selected]').value;
+filter.value = defaultRequestFilter;
 const refreshButton = $('#refresh');
 const previousButton = $('#previous-page');
 const nextButton = $('#next-page');
@@ -23,7 +24,7 @@ const monthFormat = new Intl.DateTimeFormat('pt-BR', {year: 'numeric', month: 'l
 const views = {
   requests: ['Solicitações recebidas', 'Organize os contatos, confira o investimento e encaminhe cada solicitação.'],
   activity: ['Atividade do simulador', 'Consulte as visitas e acompanhe as simulações em aberto no mês.'],
-  reports: ['Relatórios mensais', 'Veja o movimento dos contatos e os valores estimados ao longo do ano.'],
+  reports: ['Relatórios', 'Consulte os encaminhamentos de cada responsável e o movimento mensal das solicitações.'],
 };
 const viewNames = Object.keys(views);
 const idleMilliseconds = 15 * 60 * 1000;
@@ -31,6 +32,7 @@ let idleTimer;
 let apiBase;
 let requestCardSequence = 0;
 let archiveSelection = null;
+let assignment = {names: [], next: null, revision: 0};
 
 function notice(text = '', kind = '') {
   message.textContent = text;
@@ -66,15 +68,18 @@ function clearPrivateView() {
   state.generation++;
   state.authenticated = false;
   state.lastActivity = 0;
-  filter.value = 'all';
+  setView('requests');
   clearTimeout(idleTimer);
   list.replaceChildren();
+  assignment = {names: [], next: null, revision: 0};
   activityMonth.replaceChildren();
   clearSimulationActivity();
   setActivityMode('calendar');
   $('#report-metrics').replaceChildren();
   $('#report-rows').replaceChildren();
   $('#report-total').replaceChildren();
+  $('#assignment-rows').replaceChildren();
+  $('#assignment-report').hidden = true;
   $('#report-status').textContent = '';
   $('#report-table-wrap').hidden = true;
   $('#copy-text').value = '';
@@ -149,6 +154,16 @@ function recordActivity() {
   clearTimeout(idleTimer);
   idleTimer = setTimeout(() => { void logout(true); }, idleMilliseconds);
 }
+function displaySuggestion(ownerGroup) {
+  const button = ownerGroup.querySelector('.assignment-suggestion');
+  button.hidden = !assignment.next || ownerGroup.querySelector('select').value !== '';
+  button.textContent = button.hidden ? '' : 'Usar sugestão · ' + assignment.next;
+}
+function updateAssignment(next) {
+  if (!Array.isArray(next?.names) || next.revision < assignment.revision) return;
+  assignment = next;
+  list.querySelectorAll('.owner-group').forEach(displaySuggestion);
+}
 function renderItem(item) {
   const request = item.request ?? {};
   const contact = request.contact ?? {};
@@ -170,7 +185,20 @@ function renderItem(item) {
   const meta = textElement('p', 'request-meta', receivedDate(item.receivedAt));
   heading.append(titleRow, meta);
   const actions = textElement('div', 'request-actions', '');
-  const badge = textElement('span', 'pill' + (item.archived ? ' inactive' : item.handled ? ' handled' : ''), item.archived ? 'Inativa' : item.handled ? 'Encaminhada' : 'Pendente');
+  const badge = textElement('span', 'pill', '');
+  const forwardedBadge = textElement('span', 'pill handled', '');
+  function displayHandling() {
+    badge.classList.toggle('inactive', item.archived);
+    badge.textContent = item.archived ? 'Inativa' : 'Pendente';
+    badge.hidden = item.handled && !item.archived;
+    forwardedBadge.hidden = !item.handled;
+    if (!item.handled) return;
+    const handledDate = textElement(item.handledAt ? 'time' : 'span', 'handled-date', item.handledAt ? receivedDate(item.handledAt) : 'Data não registrada');
+    if (item.handledAt) handledDate.dateTime = item.handledAt;
+    forwardedBadge.title = item.handledAt ? 'Encaminhamento no horário de Brasília' : 'Data do encaminhamento não registrada';
+    forwardedBadge.replaceChildren(textElement('strong', '', 'Encaminhada:'), ' ', handledDate);
+  }
+  displayHandling();
   const copy = textElement('button', 'button copy-button', 'Copiar solicitação');
   copy.type = 'button';
   copy.setAttribute('aria-label', 'Copiar todas as informações de ' + safeText(contact.company, 'esta solicitação'));
@@ -193,7 +221,7 @@ function renderItem(item) {
     } finally { copy.disabled = false; }
   });
   const statuses = textElement('div', 'request-statuses', '');
-  statuses.append(badge);
+  statuses.append(badge, forwardedBadge);
   actions.append(statuses, copy);
   top.append(heading, actions);
   const body = textElement('div', 'request-body', '');
@@ -273,9 +301,29 @@ function renderItem(item) {
   const handledLabel = textElement('label', 'handled-label', '');
   const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = item.handled === true;
   handledLabel.append(checkbox, document.createTextNode('Encaminhado'));
+  const fields = textElement('div', 'follow-up-fields', '');
+  const ownerGroup = textElement('div', 'owner-group', '');
+  const ownerLabel = textElement('label', 'owner-label', '');
+  const owner = document.createElement('select');
+  owner.add(new Option('Selecione o responsável', ''));
+  for (const name of assignment.names) owner.add(new Option(name, name));
+  owner.value = item.assignee ?? '';
+  ownerLabel.append(textElement('span', 'note-label', 'Responsável'), owner);
+  const suggestion = textElement('button', 'assignment-suggestion', '');
+  suggestion.type = 'button';
+  ownerGroup.append(ownerLabel, suggestion);
+  const refreshSuggestion = () => displaySuggestion(ownerGroup);
+  refreshSuggestion();
+  owner.addEventListener('change', refreshSuggestion);
+  suggestion.addEventListener('click', () => {
+    owner.value = assignment.next;
+    owner.focus();
+    refreshSuggestion();
+  });
   const noteGroup = textElement('label', 'note-group', '');
-  const note = document.createElement('input'); note.type = 'text'; note.maxLength = 160; note.autocomplete = 'off'; note.value = typeof item.note === 'string' ? item.note : ''; note.placeholder = 'Ex.: Direcionado para Ana';
-  noteGroup.append(textElement('span', 'note-label', 'Responsável / observação'), note);
+  const note = document.createElement('input'); note.type = 'text'; note.maxLength = 160; note.autocomplete = 'off'; note.value = typeof item.note === 'string' ? item.note : ''; note.placeholder = 'Adicionar uma nota';
+  noteGroup.append(textElement('span', 'note-label', 'Observação'), note);
+  fields.append(ownerGroup, noteGroup);
   const save = textElement('button', 'button primary', 'Salvar'); save.type = 'submit';
   const saveMessage = textElement('p', 'save-message', ''); saveMessage.setAttribute('role', 'status'); saveMessage.setAttribute('aria-live', 'polite'); saveMessage.hidden = true;
   const archiveButton = textElement('button', 'button archive-button' + (item.archived ? ' restore-button' : ''), item.archived ? 'Restaurar' : 'Inativar');
@@ -283,7 +331,7 @@ function renderItem(item) {
   archiveButton.setAttribute('aria-label', (item.archived ? 'Restaurar solicitação de ' : 'Inativar solicitação de ') + safeText(contact.company, 'esta empresa'));
   archiveButton.addEventListener('click', () => {
     if (save.disabled || state.busy || !state.authenticated) return;
-    openArchiveDialog(item, archiveButton, checkbox.checked !== item.handled || note.value.trim() !== (item.note ?? ''));
+    openArchiveDialog(item, archiveButton, checkbox.checked !== item.handled || owner.value !== (item.assignee ?? '') || note.value.trim() !== (item.note ?? ''));
   });
   const editActions = textElement('div', 'request-edit-actions', '');
   editActions.append(archiveButton, save);
@@ -291,22 +339,32 @@ function renderItem(item) {
     save.hidden = true;
     const archivedNote = textElement('p', 'archived-card-note', 'Fora dos relatórios. Restaure para retomar o atendimento.');
     edit.append(archivedNote, editActions);
-  } else edit.append(handledLabel, noteGroup, editActions, saveMessage);
+  } else edit.append(fields, handledLabel, editActions, saveMessage);
   edit.addEventListener('submit', async event => {
     event.preventDefault();
     if (save.disabled || state.busy || item.archived || !state.authenticated) return;
+    if (checkbox.checked && !owner.value && (!item.handled || item.assignee)) {
+      saveMessage.textContent = 'Selecione o responsável antes de salvar o encaminhamento.';
+      saveMessage.className = 'save-message error'; saveMessage.hidden = false;
+      owner.focus();
+      return;
+    }
     save.disabled = true; archiveButton.disabled = true; checkbox.disabled = true; note.disabled = true;
+    owner.disabled = true; suggestion.disabled = true;
     save.textContent = 'Salvando…'; saveMessage.hidden = true;
     const generation = state.generation;
     try {
-      const result = await api('request-update.php', {method: 'POST', body: {id: item.id, handled: checkbox.checked, note: note.value.trim(), version: item.version}});
+      const result = await api('request-update.php', {method: 'POST', body: {id: item.id, handled: checkbox.checked, assignee: owner.value || null, note: note.value.trim(), version: item.version}});
       if (generation !== state.generation || !state.authenticated) return;
+      if (!Number.isSafeInteger(result.item?.version)) throw new Error('Não foi possível confirmar a atualização. Atualize a lista.');
       item = result.item;
-      if (!item || !Number.isSafeInteger(item.version)) throw new Error('Não foi possível confirmar a atualização. Atualize a lista.');
-      badge.className = 'pill' + (item.handled ? ' handled' : ''); badge.textContent = item.handled ? 'Encaminhada' : 'Pendente';
+      displayHandling();
       checkbox.checked = item.handled === true; note.value = item.note ?? '';
+      owner.value = item.assignee ?? '';
+      refreshSuggestion();
+      updateAssignment(result.assignment);
       updateDelivery();
-      saveMessage.textContent = 'Encaminhamento salvo.'; saveMessage.className = 'save-message'; saveMessage.hidden = false;
+      saveMessage.textContent = 'Alterações salvas.'; saveMessage.className = 'save-message'; saveMessage.hidden = false;
       recordActivity();
     } catch (error) {
       if (generation !== state.generation || expired(error)) return;
@@ -314,6 +372,7 @@ function renderItem(item) {
       saveMessage.className = 'save-message error'; saveMessage.hidden = false;
     } finally {
       save.disabled = false; archiveButton.disabled = false; checkbox.disabled = false; note.disabled = false; save.textContent = 'Salvar';
+      owner.disabled = false; suggestion.disabled = false;
     }
   });
   front.append(top, body, edit);
@@ -335,11 +394,12 @@ async function loadRequests(page = state.page) {
     if (!Array.isArray(result.items) || !Number.isSafeInteger(result.total)) throw new Error('Não foi possível carregar a lista. Fale com a TI.');
     state.page = Number.isSafeInteger(result.page) ? result.page : page;
     state.totalPages = Math.max(1, Number.isSafeInteger(result.totalPages) ? result.totalPages : 1);
+    updateAssignment(result.assignment);
     list.replaceChildren(...result.items.map(renderItem));
     $('#request-count').textContent = new Intl.NumberFormat('pt-BR').format(result.total);
     $('#empty-list').hidden = result.items.length > 0;
     $('#inactive-help').hidden = filter.value !== 'archived';
-    $('#empty-list h2').textContent = filter.value === 'archived' ? 'Nenhuma solicitação inativa.' : 'Nenhuma solicitação por aqui.';
+    $('#empty-list h2').textContent = ({pending: 'Nenhuma solicitação pendente.', archived: 'Nenhuma solicitação inativa.'})[filter.value] ?? 'Nenhuma solicitação por aqui.';
     $('#empty-list p').textContent = filter.value === 'archived' ? 'As solicitações inativadas aparecerão aqui e poderão ser restauradas.' : 'Os novos contatos aparecerão nesta área após o envio pelo formulário.';
     $('#pagination').hidden = state.totalPages <= 1;
     $('#page-indicator').textContent = 'Página ' + state.page + ' de ' + state.totalPages;
@@ -429,6 +489,10 @@ $('#confirm-archive').addEventListener('click', async () => {
 });
 function setView(view) {
   state.view = view;
+  if (view === 'requests') {
+    filter.value = defaultRequestFilter;
+    state.page = 1;
+  }
   if (view === 'activity') setActivityMode('calendar');
   for (const name of viewNames) {
     const selected = name === view;
@@ -955,6 +1019,21 @@ function reportMetric(label, value, description, accent = false) {
   box.append(textElement('h3', '', label), textElement('strong', '', value), textElement('p', '', description));
   return box;
 }
+function renderAssignments(totals) {
+  if (!Array.isArray(totals)) return;
+  const rows = totals.map(({assignee, count, estimatedCents, consultCount}) => {
+    const row = document.createElement('tr');
+    const owner = textElement('th', '', assignee ?? 'Sem responsável identificado');
+    owner.scope = 'row';
+    const quantity = textElement('td', '', count.toLocaleString('pt-BR'));
+    if (consultCount > 0) quantity.append(textElement('small', 'assignment-consult', consultCount + ' sob consulta'));
+    const estimate = count > 0 && count === consultCount ? 'Sob consulta' : amount(estimatedCents);
+    row.append(owner, quantity, textElement('td', 'report-amount', estimate));
+    return row;
+  });
+  $('#assignment-rows').replaceChildren(...rows);
+  $('#assignment-report').hidden = false;
+}
 function renderReport(result) {
   if (!Number.isInteger(result.year) || !Array.isArray(result.months) || result.months.length !== 12 || !validMetrics(result.total) || result.months.some((row, index) => !validMetrics(row) || row.month !== result.year + '-' + String(index + 1).padStart(2, '0'))) throw new Error('Não foi possível conferir o relatório. Atualize e tente novamente.');
   const total = result.total;
@@ -982,6 +1061,7 @@ function renderReport(result) {
   totalRow.append(totalLabel, ...[number(total.count), number(total.handledCount), number(total.consultationCount), amount(total.totalCents)].map(value => textElement('td', '', value)));
   $('#report-total').replaceChildren(totalRow);
   $('#report-caption').textContent = 'Solicitações recebidas por mês · ' + result.year;
+  renderAssignments(result.assignmentTotals);
   $('#report-table-wrap').hidden = false;
   $('#report-status').textContent = total.count ? 'Relatório atualizado. Inclui somente solicitações ativas do ano, independentemente do filtro da lista.' : 'Nenhuma solicitação ativa recebida neste ano.';
 }
@@ -991,6 +1071,7 @@ async function loadReports() {
   if (!Number.isInteger(year) || year < 2000 || year > 2100) { notice('Informe um ano entre 2000 e 2100.', 'error'); $('#report-year').focus(); return; }
   controlsBusy(true);
   $('#report-metrics').replaceChildren();
+  $('#assignment-report').hidden = true;
   $('#report-table-wrap').hidden = true;
   $('#report-status').textContent = 'Carregando relatório de ' + year + '…';
   const generation = ++state.generation;

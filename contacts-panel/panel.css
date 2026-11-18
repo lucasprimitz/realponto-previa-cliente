@@ -405,3 +405,50 @@ summary.activity-summary:hover, .activity-card details[open] > summary { backgro
   .daily-bar { x: 33%; width: 34%; }
   .daily-bar-frame { padding-inline: 4px 8px; }
 }
+.assignment-report { margin-bottom: 24px; }
+.assignment-report-help, .assignment-consult { display: block; color: var(--muted); font-weight: 400; }
+.assignment-report-help { margin-top: 6px; font-size: 14px; line-height: 1.5; }
+.assignment-consult { margin-top: 3px; font-size: 12px; }
+@media (max-width: 600px) {
+  .assignment-report .report-table th, .assignment-report .report-table td { padding: 10px 8px; white-space: normal; }
+  .assignment-report .report-table td:last-child { font-variant-numeric: tabular-nums; }
+}
+
+.handled-date {
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.follow-up-fields {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 10px 14px;
+  align-items: start;
+}
+.follow-up-fields .note-group { grid-column: auto; grid-row: auto; }
+.owner-group { min-width: 0; }
+.owner-label { display: block; }
+.owner-label select {
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.assignment-suggestion {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  margin-top: 5px;
+  padding: 2px 9px;
+  border: 1px solid #d9d4ed;
+  border-radius: 7px;
+  background: var(--lavender);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+}
+.assignment-suggestion:hover { border-color: var(--blue); }
+@media (max-width: 540px) {
+  .follow-up-fields { grid-template-columns: 1fr; }
+}

@@ -9,8 +9,8 @@
   <meta name="theme-color" content="#292578">
   <title>Solicitações de Proposta | Realponto</title>
   <link rel="icon" type="image/png" href="../assets/realponto-30-anos.png">
-  <link rel="stylesheet" href="./panel.css">
-  <script type="module" src="./panel.mjs"></script>
+  <link rel="stylesheet" href="./panel.css?v=encaminhamentos-2">
+  <script type="module" src="./panel.mjs?v=encaminhamentos-3"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Ir para o conteúdo</a>
@@ -40,11 +40,11 @@
       <nav class="workspace-tabs" aria-label="Áreas do atendimento" role="tablist">
         <button id="requests-tab" class="workspace-tab" type="button" role="tab" aria-selected="true" aria-controls="requests-view">Solicitações</button>
         <button id="activity-tab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="activity-view" tabindex="-1">Atividade do simulador</button>
-        <button id="reports-tab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="reports-view" tabindex="-1">Relatórios mensais</button>
+        <button id="reports-tab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="reports-view" tabindex="-1">Relatórios</button>
       </nav>
       <div id="delivery-notice" class="notice" hidden></div>
       <div id="requests-view" role="tabpanel" aria-labelledby="requests-tab">
-      <div class="toolbar"><div class="filter-field"><label for="status-filter">Mostrar</label><select id="status-filter"><option value="all" selected>Todas as ativas</option><option value="pending">Pendentes</option><option value="handled">Encaminhadas</option><option value="archived">Inativas</option></select></div><button id="refresh" class="button secondary" type="button">Atualizar lista</button></div>
+      <div class="toolbar"><div class="filter-field"><label for="status-filter">Mostrar</label><select id="status-filter"><option value="pending" selected>Pendentes</option><option value="all">Todas as ativas</option><option value="handled">Encaminhadas</option><option value="archived">Inativas</option></select></div><button id="refresh" class="button secondary" type="button">Atualizar lista</button></div>
       <p id="inactive-help" class="inactive-help" hidden>Solicitações inativas ficam fora da lista de atendimento e dos relatórios. Você pode restaurá-las a qualquer momento.</p>
       <p id="list-status" class="hint" role="status" aria-live="polite"></p>
       <div id="requests-list" class="requests-list"></div>
@@ -121,6 +121,13 @@
         </section>
       </section>
       <section id="reports-view" role="tabpanel" aria-labelledby="reports-tab" hidden>
+        <div id="assignment-report" class="report-table-wrap assignment-report" hidden>
+          <table class="report-table">
+            <caption>Encaminhamentos por responsável<span class="assignment-report-help">Solicitações ativas com cada pessoa, de todos os períodos. O valor considera a forma de pagamento escolhida. Propostas sob consulta entram apenas na quantidade.</span></caption>
+            <thead><tr><th scope="col">Responsável</th><th scope="col">Solicitações</th><th scope="col">Valor estimado</th></tr></thead>
+            <tbody id="assignment-rows"></tbody>
+          </table>
+        </div>
         <div class="toolbar report-toolbar"><div><h2>Movimento das solicitações</h2><p class="hint">Acompanhe os contatos recebidos e o investimento estimado em cada mês.</p></div><div class="report-filters"><div class="filter-field"><label for="report-year">Ano</label><input id="report-year" type="number" inputmode="numeric" min="2000" max="2100" step="1"></div><button id="refresh-reports" class="button secondary" type="button">Atualizar relatório</button></div></div>
         <p id="report-status" class="hint" role="status" aria-live="polite"></p>
         <div id="report-metrics" class="report-metrics"></div>
