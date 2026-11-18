@@ -46,6 +46,7 @@ svg.icon{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;s
 .eyebrow>span{width:22px;height:3px;background:var(--red);border-radius:2px}
 h1{font-size:42px;line-height:1.17;letter-spacing:-1.2px;margin:0;font-weight:730}
 h1 em{font-style:normal;color:var(--blue)}
+.hero-journey-highlight{text-decoration-line:underline;text-decoration-color:var(--red);text-decoration-thickness:3px;text-underline-offset:.14em;text-decoration-skip-ink:none}
 .hero-copy>p:last-child{color:var(--muted);font-size:17px;line-height:1.65;max-width:690px;margin:15px 0 0}
 .campaign-card{border:1px solid #d9d4ee;border-left:4px solid var(--red);border-radius:17px;background:linear-gradient(125deg,#fff,#eae7f8);color:var(--blue-deep);padding:20px 23px;box-shadow:var(--shadow)}
 .campaign-top{display:flex;align-items:center;justify-content:space-between;gap:14px}
@@ -512,8 +513,8 @@ select{cursor:pointer}
 .payment-option{position:relative;cursor:pointer;min-width:0}
 .payment-option input{position:absolute;opacity:0;width:1px;height:1px}
 .payment-card{display:flex;flex-direction:column;height:100%;padding:18px 16px;border:2px solid #e1e4ef;border-radius:14px;background:#f8f9fd;transition:border-color .15s,background .15s,box-shadow .15s}
-.payment-card-top{display:flex;justify-content:space-between;align-items:start;gap:10px;min-height:46px}
-.payment-card-top>strong{font-size:17px;line-height:1.35;color:var(--blue-deep)}
+.payment-card-top{display:flex;justify-content:space-between;align-items:start;gap:10px;min-height:60px}
+.payment-card-top>strong{font-size:24px;line-height:1.25;color:var(--blue-deep)}
 .payment-card-top .radio-dot{width:19px;height:19px;margin-top:2px}
 .payment-tag{display:inline-block;align-self:flex-start;font-size:12px;line-height:1.4;font-weight:650;background:#edeaf8;color:var(--blue);border:1px solid #dbd6ed;padding:5px 9px;border-radius:100px;margin:10px 0 16px}
 .payment-amount{display:block;color:var(--blue-deep);font-size:21px;line-height:1.4;letter-spacing:-.5px;margin-bottom:8px}
@@ -537,7 +538,6 @@ select{cursor:pointer}
  .wizard-grid.review-step{grid-template-columns:minmax(0,1fr)}
  .review-step .quote-aside{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
  .review-step .contact-fields{grid-template-columns:1fr 1fr}
- .payment-card-top{min-height:26px}
 }
 @media(max-width:600px){
  .proposal-overview{padding:24px 21px;border-radius:17px}
