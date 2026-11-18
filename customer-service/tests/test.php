@@ -46,6 +46,19 @@ check($request['estimate']['totalCents'] === $expectedTotal, 'O preço do navega
 check($request['createdAt'] === $now->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z'), 'O servidor deve definir a data.');
 check($request['payment']['label'] === Domain::PAYMENTS['pix'], 'Rótulo de pagamento deve vir do servidor.');
 check($request['contact']['taxId'] === '12345678909', 'Documento deve ser normalizado.');
+check(!array_key_exists('supportContact', $request['contact']), 'Solicitações antigas mantêm o formato do contato sem atendente.');
+foreach (['', '   '] as $emptySupportContact) {
+    $optionalContact = $input; $optionalContact['contact']['supportContact'] = $emptySupportContact;
+    check($domain->normalize($optionalContact, $now) === $request, 'Atendente em branco deve preservar o registro e a chave de repetição antigos.');
+}
+foreach ([' Janaina  ' => 'Janaina', '0' => '0', str_repeat('á', 100) => str_repeat('á', 100)] as $supportContact => $expectedSupportContact) {
+    $optionalContact = $input; $optionalContact['contact']['supportContact'] = (string)$supportContact;
+    check($domain->normalize($optionalContact, $now)['contact']['supportContact'] === $expectedSupportContact, 'Atendente deve aceitar texto livre, preservar acentos e retirar apenas espaços externos.');
+}
+foreach ([null, false, 123, ['Janaina'], str_repeat('a', 101), "Janaina\nOutro nome", "Janaina\0", "\xFF"] as $invalidSupportContact) {
+    $optionalContact = $input; $optionalContact['contact']['supportContact'] = $invalidSupportContact;
+    problem(fn() => $domain->normalize($optionalContact, $now), 422);
+}
 foreach ([
     [null, null], ['', null], ['   ', null],
     ['123', '123'], ['12345678900', '12345678900'], ['123456789012345', '123456789012345'],
@@ -75,6 +88,9 @@ $created = $store->create($request, str_repeat('a', 32));
 check($created['created'] === true && $created['mailStatus'] === 'disabled', 'Recebimento sem e-mail configurado deve ser persistido.');
 $repeat = $store->create($domain->normalize($input, $now->modify('+1 hour')), str_repeat('a', 32));
 check(!$repeat['created'] && $repeat['id'] === $created['id'], 'Repetição deve reutilizar o registro.');
+$optionalContact = $input; $optionalContact['contact']['supportContact'] = '  ';
+$optionalRepeat = $store->create($domain->normalize($optionalContact, $now), str_repeat('a', 32));
+check(!$optionalRepeat['created'] && $optionalRepeat['id'] === $created['id'], 'Reenvio com atendente vazio deve localizar o protocolo antigo.');
 $other = $request; $other['contact']['name'] = 'Outro Cliente'; problem(fn() => $store->create($other, str_repeat('a', 32)), 409);
 $raw = $store->db->query('SELECT * FROM requests')->fetch();
 check(!str_contains($raw['payload'], 'Cliente') && !str_contains($raw['payload'], '12345678909'), 'Dados pessoais não podem ficar legíveis no banco.');
@@ -112,10 +128,16 @@ check(str_contains($html, Mail::money($request['estimate']['totalCents'])), 'E-m
 check(str_contains($html, '30/10/2026') && str_contains($html, '15:39'), 'Recebimento deve ser legível no horário de São Paulo.');
 check(!str_contains($html, '/contatos/') && !str_contains($html, 'Abrir painel') && !str_contains(Mail::body($mailItem), 'painel protegido'), 'E-mail encaminhável não deve incluir acesso ao painel.');
 check(!str_contains($html, '<script') && !str_contains($html, '<iframe'), 'E-mail não pode conter conteúdo ativo.');
+check(str_contains(Mail::body($mailItem), 'Atendente informado pelo cliente: Não informado'), 'E-mail de solicitação antiga deve indicar atendente não informado.');
+$supportItem = $mailItem;
+$supportItem['request']['contact']['supportContact'] = 'Janaina <Suporte> & equipe';
+check(str_contains(Mail::body($supportItem), 'Atendente informado pelo cliente: Janaina <Suporte> & equipe'), 'E-mail em texto deve incluir o atendente informado.');
+check(str_contains(Mail::html($supportItem), 'Janaina &lt;Suporte&gt; &amp; equipe') && !str_contains(Mail::html($supportItem), '<Suporte>'), 'E-mail HTML deve exibir o atendente com escape.');
 $unsafeItem = $mailItem;
 $unsafeItem['id'] = '<script>alert(1)</script>';
 $unsafeItem['request']['contact']['name'] = '<img src=x onerror="alert(1)">';
 $unsafeItem['request']['contact']['company'] = 'Empresa & Filhos <b>Teste</b>';
+$unsafeItem['request']['contact']['supportContact'] = '<script>alert("suporte")</script>';
 $unsafeItem['request']['payment']['label'] = '<iframe src="https://example.invalid"></iframe>';
 $escaped = Mail::html($unsafeItem);
 foreach (['<script', '<img src=x', '<b>Teste</b>', '<iframe'] as $payload) check(!str_contains($escaped, $payload), 'Dados do formulário precisam ser escapados no HTML.');
@@ -183,14 +205,23 @@ foreach ([
 }
 
 $malformedInput = $input; $malformedInput['contact']['taxId'] = '123?abc';
+$malformedInput['contact']['supportContact'] = '  JANAINA  ';
+$rotationBefore = $store->listing(1, 'all')['assignment'];
 $malformedRequest = $domain->normalize($malformedInput, $now);
 $malformedReceipt = $store->create($malformedRequest, str_repeat('b', 32));
 $storedDocument = $store->db->prepare('SELECT payload FROM requests WHERE id = ?');
 $storedDocument->execute([$malformedReceipt['id']]);
-$savedRequest = json_decode($store->decrypt($storedDocument->fetchColumn()), true, 64, JSON_THROW_ON_ERROR);
+$encryptedRequest = $storedDocument->fetchColumn();
+$savedRequest = json_decode($store->decrypt($encryptedRequest), true, 64, JSON_THROW_ON_ERROR);
 check($savedRequest['contact']['taxId'] === '123?ABC', 'Persistência criptografada deve preservar documento malformado informado.');
+check($savedRequest['contact']['supportContact'] === 'JANAINA' && !str_contains($encryptedRequest, 'JANAINA'), 'Atendente deve ser armazenado no contato criptografado.');
+$pendingWithContact = $store->listing(1, 'pending');
+check($pendingWithContact['items'][0]['assignee'] === null && $pendingWithContact['assignment'] === $rotationBefore, 'Atendente informado pelo cliente não atribui responsável nem avança o rodízio.');
+$changedSupport = $malformedRequest; $changedSupport['contact']['supportContact'] = 'Outro atendente';
+problem(fn() => $store->create($changedSupport, str_repeat('b', 32)), 409);
 $malformedMail = ['id' => $malformedReceipt['id'], 'receivedAt' => $now->format(DATE_ATOM), 'request' => $savedRequest];
 check(str_contains(Mail::body($malformedMail), 'CPF / CNPJ: 123?ABC') && str_contains(Mail::html($malformedMail), '123?ABC'), 'Documento malformado deve acompanhar os dados no e-mail.');
+check(str_contains(Mail::body($malformedMail), 'Atendente informado pelo cliente: JANAINA') && str_contains(Mail::html($malformedMail), 'JANAINA'), 'Cópias HTML e texto devem incluir o atendente persistido.');
 $storedDocument = null;
 
 

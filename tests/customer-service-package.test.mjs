@@ -45,7 +45,7 @@ test('pacote funcional separa o PHP e os segredos dos arquivos públicos e prese
   assert.deepEqual(publicPricing.pricing, contactPricing().pricing);
   assert.deepEqual(await fs.readFile(path.join(output, 'pricing.json')), await fs.readFile(new URL('../customer-service/pricing.json', import.meta.url)));
   assert.ok(manifest.files.some(item => item.file === 'public/contatos/panel-model.mjs'));
-  assert.match(await fs.readFile(path.join(output, 'public/contatos/panel.mjs'), 'utf8'), /from '\.\/panel-model\.mjs'/);
+  assert.match(await fs.readFile(path.join(output, 'public/contatos/panel.mjs'), 'utf8'), /from '\.\/panel-model\.mjs(?:\?[^']+)?'/);
   await assert.rejects(packageCustomerService(output, 'test-functional'), {code: 'EEXIST'});
   const original = await fs.readFile(new URL('../customer-preview/index.html', import.meta.url), 'utf8');
   assert.match(original, /name="realponto-api-base" content=""/);

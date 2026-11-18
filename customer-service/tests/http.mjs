@@ -303,7 +303,7 @@ async function checkMonthlyActivity(customer, admin) {
 
 const canonical = await fs.readFile(path.join(service, 'pricing.json'));
 const catalog = JSON.parse(canonical);
-const request={schemaVersion:1,createdAt:'1900-01-01',contact:{name:'Teste HTTP',company:'Empresa Exemplo',email:'teste@example.invalid',phone:'11999999999',taxId:null},configuration:{system:'iponto',schedules:catalog.schedules[0],employees:catalog.employees[0],bankHours:true,workScale:false},payment:{method:'pix',label:'fake'},estimate:{totalCents:Number.MAX_SAFE_INTEGER},consent:true};
+const request={schemaVersion:1,createdAt:'1900-01-01',contact:{name:'Teste HTTP',company:'Empresa Exemplo',email:'teste@example.invalid',phone:'11999999999',taxId:null,supportContact:'  JANAINA  '},configuration:{system:'iponto',schedules:catalog.schedules[0],employees:catalog.employees[0],bankHours:true,workScale:false},payment:{method:'pix',label:'fake'},estimate:{totalCents:Number.MAX_SAFE_INTEGER},consent:true};
 try {
   await seedLegacyActivity();
   let ready=false; const readinessDeadline=Date.now()+60000; while(Date.now()<readinessDeadline && server.exitCode===null){try{await fetch(`${origin}/api/session.php`,{signal:AbortSignal.timeout(1000)});ready=true;break;}catch{await new Promise(resolve=>setTimeout(resolve,50));}}
@@ -340,15 +340,20 @@ try {
   const key=randomUUID(); const created=await customer.call('requests.php',{method:'POST',data:request,headers:{'Idempotency-Key':key,...deviceHeaders.desktop}});
   check(created.status,201,'Recebimento persistido'); check(created.body.mailStatus,'disabled','SMTP não configurado não perde contato');
   assert.equal('request' in created.body,false); assert.equal('contact' in created.body,false); checks+=2;
+  assert.doesNotMatch(JSON.stringify(created.body), /supportContact|JANAINA/); checks++;
+  check((await stranger.call('requests.php')).status,401,'Atendente informado permanece restrito ao painel autenticado');
   result=await customer.call('requests.php',{method:'POST',data:{...request,createdAt:'2030-01-01'},headers:{'Idempotency-Key':key}});
   check(result.status,200,'Repetição não duplica'); check(result.body.id,created.body.id,'Mesmo protocolo');
-  check((await customer.call('requests.php',{method:'POST',data:{...request,contact:{...request.contact,name:'Outro Nome'}},headers:{'Idempotency-Key':key}})).status,409,'Chave não aceita dados diferentes');
+  check((await customer.call('requests.php',{method:'POST',data:{...request,contact:{...request.contact,supportContact:'Outro atendente'}},headers:{'Idempotency-Key':key}})).status,409,'Chave não aceita alteração do atendente informado');
   check((await customer.call('requests.php',{method:'POST',data:{...request,configuration:{...request.configuration,system:'forged'}},headers:{'Idempotency-Key':randomUUID()}})).status,422,'Sistema inválido rejeitado no servidor');
   await admin.call('session.php'); const oldCookie=admin.cookie,oldCsrf=admin.csrf;
   result=await admin.call('login.php',{method:'POST',data:{password}}); check(result.status,200,'Login válido'); check(result.body.authenticated,true,'Autenticação confirmada');
   assert.notEqual(admin.cookie,oldCookie); assert.notEqual(admin.csrf,oldCsrf); checks+=2;
   result=await admin.call('requests.php'); check(result.body.total,1,'Somente um registro');
   const item=result.body.items[0]; check(item.request.contact.name,'Teste HTTP','Contato preservado'); assert.notEqual(item.request.estimate.totalCents,request.estimate.totalCents); checks++;
+  check(item.request.contact.supportContact,'JANAINA','Painel autenticado recebe o atendente informado com espaços externos removidos');
+  check(item.assignee,null,'Atendente do contato não define o responsável interno');
+  check(result.body.assignment.revision,0,'Atendente informado não altera o rodízio');
   check(result.headers.get('cache-control'),'no-store, private','Sem cache de dados pessoais');
   const reportYear = new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric'}).format(new Date(item.receivedAt));
   const reportResponse = await admin.call('reports.php?year='+reportYear);

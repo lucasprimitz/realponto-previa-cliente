@@ -124,6 +124,7 @@ export function buildRequestText(value) {
     'Telefone / WhatsApp: ' + safeText(formatPhone(contact.phone)),
     'E-mail: ' + safeText(contact.email),
     'CPF / CNPJ: ' + safeText(formatTaxId(contact.taxId)),
+    'Atendente informado pelo cliente: ' + safeText(contact.supportContact),
     '',
     'CONFIGURAÇÃO SOLICITADA',
     'Sistema: ' + systemLabel(configuration.system),

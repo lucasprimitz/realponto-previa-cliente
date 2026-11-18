@@ -165,6 +165,7 @@ select{cursor:pointer}
 .contact-fields{display:grid;grid-template-columns:1fr 1fr;gap:22px 18px;background:#f6f7fc;border:1px solid #dce1ef;border-radius:15px;padding:23px}
 .contact-fields label{display:block;font-size:15px;font-weight:650;margin-bottom:10px}
 .contact-fields>div{min-width:0}
+.contact-fields .contact-field-wide{grid-column:1/-1}
 .contact-fields .optional-label{font-size:13px;font-weight:400;color:var(--muted)}
 .contact-fields .field-help{font-size:13px;line-height:1.6;color:var(--muted);margin:9px 0 0}
 .contact-fields select{font-size:14px}
@@ -416,6 +417,73 @@ select{cursor:pointer}
  .final-price{font-size:31px}
 }
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+
+/* Orientações gerais para o planejamento da nova jornada. */
+.journey-guide{padding:30px;margin-bottom:38px;border:1px solid var(--border);border-radius:22px;background:white;box-shadow:var(--shadow)}
+.journey-guide-heading{display:grid;grid-template-columns:1.15fr 1fr;gap:32px;align-items:end;margin-bottom:26px}
+.journey-guide-heading h2{font-size:29px;line-height:1.25;letter-spacing:-.7px;margin:0;max-width:490px}
+.journey-guide-heading>p{font-size:16px;line-height:1.7;color:var(--muted);margin:0;max-width:440px}
+.journey-guide .eyebrow{font-size:11px;color:#78698b;line-height:1.5}
+.journey-timeline{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;list-style:none;padding:0;margin:0}
+.journey-timeline>li{min-width:0;padding:22px;border:1px solid #e0e2ee;border-top:3px solid #acafc5;border-radius:15px;background:#f8f9fd}
+.journey-timeline>li:nth-child(2){background:#f0edfb;border-color:#d9d3f0;border-top-color:#7b6ac1}
+.journey-timeline>li:nth-child(3){background:#eaf1f7;border-color:#d4e2ef;border-top-color:#6689a6}
+.journey-period{display:inline-block;color:var(--blue-deep);font-size:13px;font-weight:650;line-height:1.5}
+.journey-hours{display:flex;align-items:baseline;flex-wrap:wrap;gap:7px;margin:16px 0 12px;color:var(--blue-deep)}
+.journey-hours strong{font-size:40px;font-weight:750;line-height:1;letter-spacing:-1px}
+.journey-hours span{font-size:14px}
+.journey-timeline>li>p:last-child{font-size:14px;line-height:1.6;color:var(--muted);margin:0}
+.journey-timeline-note{font-size:13px;line-height:1.65;color:var(--muted);margin:13px 2px 24px}
+.journey-guide-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.journey-guide-card{padding:24px;min-width:0;border:1px solid var(--border);border-radius:16px;background:#fff}
+.journey-week-card{background:#fafafe}
+.journey-guide-card h3{display:flex;align-items:center;gap:12px;margin:0 0 17px;font-size:19px;line-height:1.35;color:var(--blue-deep)}
+.journey-guide-icon{width:38px;height:38px;flex-shrink:0;display:grid;place-items:center;border:1px solid #e0daf5;border-radius:11px;background:var(--lavender);color:var(--blue)}
+.journey-guide-card p{font-size:15px;line-height:1.7;color:var(--muted);margin:0 0 16px}
+.journey-guide-card p strong{color:var(--blue-deep)}
+.journey-guide-card h4{font-size:15px;line-height:1.45;color:var(--blue-deep);margin:0 0 7px}
+.journey-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;list-style:none;padding:0;margin:18px 0 10px}
+.journey-week li{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-width:0;padding:13px 2px;border:1px solid #ddd8f0;border-radius:10px;background:#eeebf9;color:var(--blue);line-height:1.15}
+.journey-week li>span{font-size:12px}
+.journey-week li>strong{font-size:15px;font-weight:700}
+.journey-week .journey-rest{background:#eaf4ef;border-color:#cce2d5;color:#2e6248}
+.journey-week .journey-rest strong{font-size:12px}
+.journey-guide-card .journey-caption{font-size:12px;line-height:1.5;margin:0 0 20px}
+.journey-transition-example{border-top:1px solid var(--border);padding-top:18px}
+.journey-transition-example p:last-child{font-size:13px;margin-bottom:0}
+.journey-rule+.journey-rule{border-top:1px solid #e6e8f0;padding-top:16px}
+.journey-rule:last-child p{margin-bottom:0}
+.journey-preparation{display:grid;grid-template-columns:.7fr 1.3fr;gap:28px;margin-top:22px;padding:24px;border-radius:16px;background:#efedfa;border:1px solid #e0daf1}
+.journey-preparation h3{font-size:22px;line-height:1.35;letter-spacing:-.4px;margin:0;color:var(--blue-deep)}
+.journey-preparation ol{display:grid;gap:12px;list-style:none;padding:0;margin:0;counter-reset:preparation}
+.journey-preparation li{display:flex;align-items:flex-start;gap:12px;font-size:14px;line-height:1.65;color:#514c6c;counter-increment:preparation}
+.journey-preparation li:before{content:counter(preparation);display:grid;place-items:center;flex:0 0 25px;height:25px;border:1px solid #d9d3ec;border-radius:8px;background:white;color:var(--blue);font-size:12px;font-weight:700}
+.journey-guide-sources{display:flex;flex-wrap:wrap;justify-content:space-between;gap:7px 22px;border-top:1px solid #e4e7ef;margin-top:23px;padding-top:17px;color:var(--muted);font-size:12px;line-height:1.65}
+.journey-guide-sources p{margin:0}
+.journey-guide-sources a{color:var(--blue);text-underline-offset:3px}
+@media(max-width:1000px){
+ .journey-guide-heading{grid-template-columns:1fr;gap:14px}
+ .journey-guide-heading>p{max-width:none}
+ .journey-timeline>li{padding:18px}
+ .journey-guide-grid{grid-template-columns:1fr}
+ .journey-week-card .journey-week{max-width:480px}
+}
+@media(max-width:600px){
+ .journey-guide{padding:24px 18px;border-radius:18px;margin-bottom:28px}
+ .journey-guide-heading{margin-bottom:22px}
+ .journey-guide-heading h2{font-size:25px}
+ .journey-timeline{grid-template-columns:1fr;gap:12px}
+ .journey-timeline>li{padding:18px 20px}
+ .journey-hours{margin:12px 0 10px}
+ .journey-hours strong{font-size:36px}
+ .journey-guide-card{padding:20px 16px}
+ .journey-guide-card h3{font-size:18px;gap:10px}
+ .journey-week{gap:3px}
+ .journey-week li{border-radius:8px}
+ .journey-week li>span,.journey-week .journey-rest strong{font-size:11px}
+ .journey-preparation{grid-template-columns:1fr;gap:20px;padding:20px 17px}
+ .journey-preparation h3{font-size:21px}
+}
 
 /* Etapa final: investimento primeiro, preferência de pagamento e contato. */
 .proposal-overview{grid-column:1 / -1;padding:28px 32px;border-color:#d4cfee;background:linear-gradient(115deg,#fff 45%,#f0eefb);border-top:4px solid var(--blue)}

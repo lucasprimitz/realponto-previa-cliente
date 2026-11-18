@@ -1,4 +1,4 @@
-import {safeText, amount, receivedDate, quantity, formatPhone, formatTaxId, systemLabel, selectedPayment, buildRequestText, PAYMENTS, installmentExample} from './panel-model.mjs';
+import {safeText, amount, receivedDate, quantity, formatPhone, formatTaxId, systemLabel, selectedPayment, buildRequestText, PAYMENTS, installmentExample} from './panel-model.mjs?v=20261118-atendente';
 const $ = selector => document.querySelector(selector);
 const list = $('#requests-list');
 const loginPanel = $('#login-panel');
@@ -240,6 +240,12 @@ function renderItem(item) {
   addDetail(person.dl, 'Telefone / WhatsApp', formatPhone(contact.phone) || 'Não informado');
   addDetail(person.dl, 'E-mail', safeText(contact.email));
   addDetail(person.dl, 'CPF / CNPJ', safeText(formatTaxId(contact.taxId)));
+  const supportContact = textElement('div', 'wide client-support-contact', '');
+  supportContact.append(
+    textElement('dt', '', 'Atendente informado pelo cliente'),
+    textElement('dd', '', safeText(contact.supportContact)),
+  );
+  person.dl.append(supportContact);
   const showDetails = textElement('button', 'request-details-button', 'Ver configuração e valores');
   showDetails.type = 'button';
   showDetails.setAttribute('aria-controls', back.id);

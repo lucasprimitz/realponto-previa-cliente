@@ -127,6 +127,19 @@ test('copy explicitly excludes retiring old schedules on Secullum Offline', () =
   }
 });
 
+test('client support contact is copied independently of the assigned owner and preserves legacy fallback', () => {
+  const data = item();
+  data.assignee = 'HENRIQUE';
+  data.request.contact.supportContact = '  Maria <Suporte> & João  ';
+  assert.ok(buildRequestText(data).includes('Atendente informado pelo cliente: Maria <Suporte> & João'));
+  assert.ok(!buildRequestText(data).includes('HENRIQUE'));
+  assert.equal(data.assignee, 'HENRIQUE');
+  for (const value of [undefined, null, '', '   ', {}]) {
+    data.request.contact.supportContact = value;
+    assert.ok(buildRequestText(data).includes('Atendente informado pelo cliente: Não informado'));
+  }
+});
+
 test('plain copied text preserves names and document references without HTML interpretation', () => {
   const data = item();
   data.request.contact.company = 'Oficina <Norte> & Sul';

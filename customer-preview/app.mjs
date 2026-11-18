@@ -221,6 +221,7 @@ function renderRequestPreview(request, receipt) {
     ['CPF / CNPJ', request.contact.taxId ? formatTaxId(request.contact.taxId) : 'Não informado'],
     ['E-mail', request.contact.email],
     ['Telefone / WhatsApp', formatPhone(request.contact.phone)],
+    ['Atendente do suporte', request.contact.supportContact || 'Não informado'],
     ['Pagamento desejado', request.payment.label],
   ];
   if (receipt && !receipt.demo) rows.unshift(['Protocolo', receipt.id, 'request-detail-wide']);
@@ -354,6 +355,7 @@ form.addEventListener('submit', async event => {
       contactName: selected('contactName'), company: selected('company'),
       email: selected('email'), phone: selected('phone'),
       taxId: selected('taxId'), paymentMethod: selected('paymentMethod'),
+      supportContact: selected('supportContact'),
       contactPermission: document.querySelector('#contact-permission').checked,
     });
     if (connected) request.pricingVersion = pricingVersion;

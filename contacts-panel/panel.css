@@ -449,6 +449,11 @@ summary.activity-summary:hover, .activity-card details[open] > summary { backgro
   text-align: left;
 }
 .assignment-suggestion:hover { border-color: var(--blue); }
+.detail-list .client-support-contact {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.client-support-contact dt { color: var(--deep); font-weight: 650; }
 @media (max-width: 540px) {
   .follow-up-fields { grid-template-columns: 1fr; }
 }

@@ -97,6 +97,24 @@ test('CPF/CNPJ é opcional e não impede uma solicitação sem documento', () =>
   }
 });
 
+test('atendente informado acompanha o contato sem atribuir um responsável interno', () => {
+  const result = request({supportContact: '  Maria Eduarda  '});
+  assert.equal(result.contact.supportContact, 'Maria Eduarda');
+  assert.equal('assignee' in result, false);
+  assert.equal('assignee' in result.contact, false);
+  assert.equal(result.estimate.totalCents, expectedTotal);
+});
+
+test('atendente é opcional e mantém a solicitação anterior quando deixado em branco', () => {
+  for (const supportContact of ['', '  ', null, undefined]) {
+    assert.deepEqual(request({supportContact}), request());
+  }
+  assert.equal(request({supportContact: 'A'.repeat(100)}).contact.supportContact.length, 100);
+  for (const supportContact of [17, false, [], {}, 'A'.repeat(101), 'Ana\nSilva', 'Ana\u0000']) {
+    assert.throws(() => request({supportContact}), error => error.field === 'supportContact');
+  }
+});
+
 test('normaliza máscaras e admite CNPJ alfanumérico sem afirmar validade cadastral', () => {
   assert.equal(normalizeTaxId(' 12.abc.345/01de-67 '), '12ABC34501DE67');
   for (const taxId of ['12345678900', '123.456.789-00', '12.345.678/0001-90', '12.abc.345/01de-67']) {

@@ -10,7 +10,7 @@
   <meta name="description" content="Serviço de implantação e parametrização da nova jornada pela Realponto: cadastro de horários, inativação dos antigos e reagendamento da equipe conforme o sistema e o escopo aprovado.">
   <title>Nova Jornada | Realponto</title>
   <link rel="icon" href="./assets/realponto-30-anos.png">
-  <link rel="stylesheet" href="./preview.css">
+  <link rel="stylesheet" href="./preview.css?v=atendente-suporte-1">
   <script type="module" src="./app.mjs"></script>
 </head>
 <body>
@@ -30,7 +30,7 @@
   <div class="preview-ribbon" id="preview-ribbon"><div class="container"><span><i></i> Prévia da página do cliente</span><span>Preenchimento e envio demonstrativos</span></div></div>
   <header class="site-header container">
     <a class="brand" href="#inicio" aria-label="Realponto — início"><img src="./assets/realponto-30-anos.png" width="82" height="82" alt="Grupo Realponto — 30 anos"><span class="brand-divider"></span><span>Nova Jornada<span>Seu ponto, preparado.</span></span></a>
-    <nav aria-label="Navegação principal"><a href="#como-funciona">Como funciona</a><a href="#duvidas">Dúvidas frequentes</a><a class="header-cta" href="#simulador">Simular configuração <svg class="icon"><use href="#arrow"/></svg></a></nav>
+    <nav aria-label="Navegação principal"><a href="#como-funciona">Como funciona</a><a href="#orientacoes">Orientações</a><a href="#duvidas">Dúvidas frequentes</a><a class="header-cta" href="#simulador">Simular configuração <svg class="icon"><use href="#arrow"/></svg></a></nav>
   </header>
   <main id="inicio">
     <section class="hero container" aria-labelledby="hero-title">
@@ -97,7 +97,8 @@
                 <div><label for="email">E-mail</label><input id="email" name="email" type="email" autocomplete="email" placeholder="voce@empresa.com.br" maxlength="254" required></div>
                 <div><label for="phone">Telefone / WhatsApp</label><input id="phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="(11) 99999-9999" maxlength="32" required></div>
                 <div><label for="tax-id">CPF / CNPJ <span class="optional-label">(opcional)</span></label><input id="tax-id" name="taxId" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CPF ou CNPJ do cadastro" maxlength="40" aria-describedby="tax-id-help"><p class="field-help" id="tax-id-help">Se já tiver cadastro, informe o documento para facilitar a localização. Também aceitamos CNPJ alfanumérico.</p></div>
-                <div class="contact-permission-field"><label class="contact-permission"><input type="checkbox" id="contact-permission" required><span>Autorizo o contato da Realponto para tratar desta solicitação.</span></label></div>
+                <div><label for="support-contact">Nome do atendente <span class="optional-label">(opcional)</span></label><input id="support-contact" name="supportContact" type="text" autocomplete="off" placeholder="Nome do atendente, se houver" maxlength="100" aria-describedby="support-contact-help"><p class="field-help" id="support-contact-help">Se já está falando com alguém do suporte, informe o nome para ajudar no direcionamento da sua solicitação.</p></div>
+                <div class="contact-permission-field contact-field-wide"><label class="contact-permission"><input type="checkbox" id="contact-permission" required><span>Autorizo o contato da Realponto para tratar desta solicitação.</span></label></div>
               </div>
               <div class="preview-note" id="submission-note"><svg class="icon"><use href="#info"/></svg><p><strong>Você está testando uma prévia.</strong> Use dados fictícios. O envio abaixo é demonstrativo e não encaminha informações para a Realponto.</p></div>
             </section>
@@ -124,6 +125,40 @@
         <li><span>02</span><h3>Alinhe com nossa equipe</h3><p>Conferimos o escopo, a proposta e a data de implantação com você.</p></li>
         <li><span>03</span><h3>Nós cuidamos da implantação</h3><p>Após a aprovação da proposta, a Realponto configura o sistema e reagenda os funcionários para a data combinada.</p></li>
       </ol>
+    </section>
+    <section class="journey-guide container" id="orientacoes" aria-labelledby="journey-guide-title">
+      <div class="journey-guide-heading">
+        <div><p class="eyebrow">ENTENDA A NOVA JORNADA</p><h2 id="journey-guide-title">O que muda na escala da sua equipe?</h2></div>
+        <p>Conheça as etapas da mudança e os principais cuidados para planejar os horários e os descansos.</p>
+      </div>
+      <ol class="journey-timeline" aria-label="Etapas da redução da jornada: regra geral">
+        <li><span class="journey-period">Até 15/12/2026</span><p class="journey-hours"><span>Até</span> <strong>44h</strong> <span>por semana</span></p><p>Limite semanal anterior ao início da transição.</p></li>
+        <li><span class="journey-period">16/12/2026 a 15/12/2027</span><p class="journey-hours"><span>Até</span> <strong>42h</strong> <span>por semana</span></p><p>Primeira etapa da redução, com dois dias de descanso semanal remunerado.</p></li>
+        <li><span class="journey-period">A partir de 16/12/2027</span><p class="journey-hours"><span>Até</span> <strong>40h</strong> <span>por semana</span></p><p>Nova redução do limite semanal, mantendo os dois descansos.</p></li>
+      </ol>
+      <p class="journey-timeline-note">São limites máximos da regra geral. A empresa pode adotar uma jornada menor, como 40 horas já na primeira etapa.</p>
+      <div class="journey-guide-grid">
+        <article class="journey-guide-card journey-week-card">
+          <h3><span class="journey-guide-icon"><svg class="icon" aria-hidden="true"><use href="#calendar"/></svg></span>Como fica a semana?</h3>
+          <p>No modelo <strong>5×2</strong>, são cinco dias de trabalho e dois de descanso. Veja um exemplo de <strong>40 horas semanais</strong>:</p>
+          <ul class="journey-week" aria-label="Exemplo: 8 horas de trabalho de segunda a sexta e folga no sábado e no domingo">
+            <li><span>Seg</span><strong>8h</strong></li><li><span>Ter</span><strong>8h</strong></li><li><span>Qua</span><strong>8h</strong></li><li><span>Qui</span><strong>8h</strong></li><li><span>Sex</span><strong>8h</strong></li><li class="journey-rest"><span>Sáb</span><strong>Folga</strong></li><li class="journey-rest"><span>Dom</span><strong>Folga</strong></li>
+          </ul>
+          <p class="journey-caption">Exemplo ilustrativo. Os dias de descanso podem ser outros.</p>
+          <div class="journey-transition-example"><h4>E na etapa de 42 horas?</h4><p>Um modelo é trabalhar cinco dias de até <strong>8h24</strong>, com dois descansos. Sem acordo coletivo firmado até 15/12/2026, essa distribuição é permitida pela decisão provisória do STF durante a transição, até 15/12/2027.</p><p>A decisão ainda será analisada pelo Plenário. Confirme com o contador, jurídico ou sindicato como aplicá-la à sua empresa.</p></div>
+        </article>
+        <article class="journey-guide-card journey-rules-card">
+          <h3><span class="journey-guide-icon"><svg class="icon" aria-hidden="true"><use href="#people"/></svg></span>O que considerar na sua escala</h3>
+          <div class="journey-rule"><h4>Dois descansos, com organização</h4><p>As folgas não precisam ser consecutivas nem cair no sábado e no domingo. Um dos descansos deve ser preferencialmente no domingo. A operação e as regras da categoria orientam a distribuição.</p></div>
+          <div class="journey-rule"><h4>Redução da jornada, salário preservado</h4><p>A mudança não pode reduzir o salário nem o piso da categoria. Quem já trabalha 40 horas ou menos deve conferir principalmente a organização dos descansos.</p></div>
+          <div class="journey-rule"><h4>Escalas especiais precisam de avaliação</h4><p>Plantões, escalas 12×36 e regimes de revezamento exigem análise própria. Acordos coletivos podem prever outras formas de distribuir os descansos, preservando esse direito.</p></div>
+        </article>
+      </div>
+      <div class="journey-preparation">
+        <div><p class="eyebrow">COMECE PELO PLANEJAMENTO</p><h3>O que sua empresa pode organizar agora</h3></div>
+        <ol><li>Defina os horários desejados e os dias de trabalho e descanso.</li><li>Liste os modelos de horário e os funcionários de cada grupo.</li><li>Alinhe os acordos da categoria e o banco de horas com seu contador ou jurídico.</li><li>Comunique a nova rotina à equipe e combine a data de implantação.</li></ol>
+      </div>
+      <div class="journey-guide-sources"><p>Orientações gerais revisadas em <time datetime="2026-11-18">18/11/2026</time>. Confirme as condições da sua categoria antes de definir a nova escala.</p><p>Fontes: <a href="https://www2.camara.leg.br/legin/fed/emecon/2026/emendaconstitucional-141-16-outubro-2026-800062-publicacaooriginal-181622-pl.html" target="_blank" rel="noopener noreferrer">EC 141/2026</a><span aria-hidden="true"> · </span><a href="https://especial.camara.leg.br/reducao-da-jornada-detrabalho-e-fim-da-escala-6x1/" target="_blank" rel="noopener noreferrer">Guia da Câmara</a><span aria-hidden="true"> · </span><a href="https://noticias.stf.jus.br/postsnoticias/stf-mantem-regra-de-transicao-para-implementacao-da-jornada-5x2/" target="_blank" rel="noopener noreferrer">Decisão de transição do STF</a></p></div>
     </section>
     <section class="faq-section container" id="duvidas" aria-labelledby="faq-title"><div><p class="eyebrow">PODEMOS AJUDAR</p><h2 id="faq-title">Algumas respostas<br> antes do próximo passo.</h2><p>Uma configuração bem planejada começa com as informações certas.</p></div><div class="faq-list"><details><summary>Quem realiza a implantação e o que está incluído?</summary><p>Todo o serviço de implantação e parametrização é realizado pela equipe Realponto, conforme o escopo aprovado. Nossa equipe cadastra os novos horários, inativa os horários antigos definidos para substituição e reagenda os funcionários contemplados na proposta para que passem a utilizar os novos horários na data de início combinada com sua empresa.</p><p><strong>A inativação dos horários antigos está incluída no Secullum RH, RHID e iPonto. No Secullum Offline, essa etapa não está disponível.</strong> Após a validação das informações e a aprovação da proposta, alinhamos a execução com você.</p></details><details><summary>E se eu não quiser contratar a implantação?</summary><p>Fique tranquilo! Nosso suporte também pode orientar você a realizar o processo.</p><p>Se você possui contrato de suporte, essa orientação já está inclusa no atendimento. Caso não tenha contrato, entre em contato com o suporte da Realponto e solicite o valor do atendimento.</p></details><details><summary>O que conta como um horário?</summary><p>É cada modelo de horário que será cadastrado no sistema. Vários funcionários podem usar o mesmo horário ou escala. Informe quantos modelos serão necessários na nova rotina.</p></details><details><summary>Devo considerar a equipe atual ou a que será reagendada?</summary><p>Selecione o pacote que comporte todos os funcionários que você deseja incluir no serviço, considerando também o crescimento previsto da equipe.</p></details><details><summary>Como funciona o desconto de antecipação?</summary><p>A campanha oferece <span data-campaign-percent>30%</span> sobre o total da parametrização para propostas aprovadas até <strong data-deadline>15/12/2026</strong>. Preencher a simulação não equivale à aprovação. Após o prazo, aplica-se o valor sem o desconto da campanha.</p></details><details><summary>O que acontece após o preenchimento?</summary><p>Após o preenchimento e envio da solicitação, um analista da Realponto entrará em contato para confirmar e validar as informações. Se necessário, poderá ser realizado um acesso remoto para essa validação. Após a aprovação da proposta, nossa equipe realizará a implantação e parametrização do sistema conforme o escopo e a data combinados.</p></details><details><summary>Quais são as opções de pagamento?</summary><p>Você pode optar por pagamento no Pix com 5% de desconto adicional, boleto em até 6 parcelas, sob consulta, ou cartão de crédito em até 10 parcelas sem juros. Você pode escolher menos parcelas. A disponibilidade do boleto está sujeita à análise do cliente. As condições serão confirmadas na proposta.</p></details></div></section>
   </main>

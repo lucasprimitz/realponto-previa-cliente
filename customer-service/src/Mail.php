@@ -30,13 +30,15 @@ final class Mail {
     }
     private static function details(array $item): array {
         $r = $item['request']; $c = $r['configuration']; $p = $r['contact'];
+        $supportContact = trim($p['supportContact'] ?? '');
         $systems = ['secullum-offline' => 'Secullum Offline', 'secullum-rh' => 'Secullum RH', 'rhid' => 'RHID', 'iponto' => 'iPonto'];
         $quantity = static fn(mixed $value, string $noun, int $limit): string => $value === 'consultar'
             ? 'Acima de ' . number_format($limit, 0, ',', '.') . ' ' . $noun . ' — sob consulta'
             : 'Até ' . number_format((int)$value, 0, ',', '.') . ' ' . $noun;
         return [
             'paymentLabel' => Domain::PAYMENTS[$r['payment']['method']] ?? $r['payment']['label'],
-            'contact' => ['Nome' => $p['name'], 'Empresa' => $p['company'], 'E-mail' => $p['email'], 'Telefone / WhatsApp' => self::telephone($p['phone']), 'CPF / CNPJ' => self::document($p['taxId'] ?? null)],
+            'contact' => ['Nome' => $p['name'], 'Empresa' => $p['company'], 'E-mail' => $p['email'], 'Telefone / WhatsApp' => self::telephone($p['phone']), 'CPF / CNPJ' => self::document($p['taxId'] ?? null),
+                'Atendente informado pelo cliente' => $supportContact === '' ? 'Não informado' : $supportContact],
             'configuration' => ['Sistema' => $systems[$c['system']] ?? $c['system'], 'Horários' => $quantity($c['schedules'], 'horários', 100), 'Funcionários' => $quantity($c['employees'], 'funcionários', 1000), 'Banco de horas' => $c['bankHours'] ? 'Sim' : 'Não', 'Escalas' => $c['workScale'] ? 'Sim' : 'Não', 'Inativação dos horários antigos' => $c['system'] === 'secullum-offline' ? 'Não contemplada para Secullum Offline' : 'Contemplada'],
         ];
     }

@@ -87,6 +87,10 @@ export function buildCustomerRequest(input = {}, now = new Date()) {
     invalid('taxId', 'Confira o campo CPF / CNPJ.');
   }
   const taxId = normalizeTaxId(input.taxId) || String(input.taxId ?? '').trim().toUpperCase() || null;
+  if (input.supportContact != null && (typeof input.supportContact !== 'string' || input.supportContact.length > 100 || /[\u0000-\u001f\u007f]/.test(input.supportContact))) {
+    invalid('supportContact', 'Informe o nome do atendente em até 100 caracteres.');
+  }
+  const supportContact = input.supportContact?.trim();
 
   return {
     schemaVersion: 1,
@@ -97,6 +101,7 @@ export function buildCustomerRequest(input = {}, now = new Date()) {
       email: requiredText(input, 'email'),
       phone: requiredText(input, 'phone'),
       taxId,
+      ...(supportContact ? {supportContact} : {}),
     },
     configuration: {
       system: input.system,

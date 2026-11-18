@@ -38,9 +38,15 @@ final class Domain {
         $clean = $this->configuration($configuration);
         $method = $payment['method'] ?? null;
         if (!is_string($method) || !isset(self::PAYMENTS[$method])) throw new Problem(422, 'Selecione uma forma de pagamento válida.');
+        $contactDetails = ['name' => self::text($contact['name'] ?? null, 'nome', 2, 120), 'company' => self::text($contact['company'] ?? null, 'empresa', 2, 180), 'email' => $email, 'phone' => $phone, 'taxId' => $taxId];
+        if (array_key_exists('supportContact', $contact)) {
+            $supportContact = self::text($contact['supportContact'], 'atendente informado', 0, 100);
+            // Omitting empty optional data preserves retries from older clients.
+            if ($supportContact !== '') $contactDetails['supportContact'] = $supportContact;
+        }
         return [
             'schemaVersion' => 1, 'createdAt' => $now->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z'),
-            'contact' => ['name' => self::text($contact['name'] ?? null, 'nome', 2, 120), 'company' => self::text($contact['company'] ?? null, 'empresa', 2, 180), 'email' => $email, 'phone' => $phone, 'taxId' => $taxId],
+            'contact' => $contactDetails,
             'configuration' => $clean, 'payment' => ['method' => $method, 'label' => self::PAYMENTS[$method]],
             'estimate' => $this->configurationEstimate($clean, $now), 'consent' => true,
         ];
