@@ -353,8 +353,8 @@ summary.activity-summary:hover, .activity-card details[open] > summary { backgro
 .daily-bar-day-axis { margin: 8px 0 0; text-align: center; }
 .daily-bar-rows {
   --axis-width: 44px;
-  --min-column-width: 42px;
-  --date-tile-size: 38px;
+  --min-column-width: 38px;
+  --date-tile-size: 36px;
   --day-label-height: calc(var(--date-tile-size) + 12px);
   display: grid; grid-auto-rows: minmax(calc(var(--day-label-height) + 104px), 1fr);
   min-width: 0; gap: 10px;

@@ -764,7 +764,9 @@ function renderDailyBarChart(month, traffic, today, startDay, partialStartDay) {
     const axisWidth = parseFloat(style.getPropertyValue('--axis-width'));
     const columnWidth = Math.max(parseFloat(style.getPropertyValue('--min-column-width')), max >= 1000 ? 58 : 0);
     const capacity = Math.max(1, Math.floor((width - axisWidth) / columnWidth));
-    const columns = Math.ceil(bars.length / Math.ceil(bars.length / capacity));
+    // Fill the current row before wrapping; balance the two rows of a closed month.
+    const preferredColumns = month < today.slice(0, 7) ? Math.ceil(bars.length / 2) : 16;
+    const columns = Math.min(bars.length, capacity, preferredColumns);
     if (columns === lastColumns) return;
     lastColumns = columns;
     rows.style.setProperty('--chart-columns', columns);
