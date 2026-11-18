@@ -52,9 +52,13 @@ test('pacote isolado mantém os cálculos e carrega todos os recursos dentro de 
   const html = await htmlResponse.text();
   assert.match(html,/connect-src 'self'/);
   assert.match(html,/form-action 'none'/);
-  const references = [...html.matchAll(/(?:href|src)="([^"#][^"]*)"/g)].map(match=>match[1]);
-  for (const reference of references) {
+  const references = [...html.matchAll(/<([a-z][\w:-]*)\b([^>]*)>/gi)].flatMap(([, tag, attributes]) =>
+    [...attributes.matchAll(/\b(href|src)="([^"#][^"]*)"/gi)].map(([, attribute, reference]) =>
+      ({tag: tag.toLowerCase(), attribute: attribute.toLowerCase(), reference})));
+  for (const {tag, attribute, reference} of references) {
     const resolved = new URL(reference,base);
+    // Links de navegação externos não são recursos necessários para carregar a prévia.
+    if (tag === 'a' && attribute === 'href' && resolved.origin !== origin) continue;
     assert.equal(resolved.origin,origin);
     assert.ok(resolved.pathname.startsWith('/previa-cliente/'),reference);
     assert.equal((await fetch(resolved)).status,200,reference);
