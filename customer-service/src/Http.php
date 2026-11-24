@@ -3,6 +3,8 @@ declare(strict_types=1);
 namespace Realponto;
 
 final class Http {
+    private const SESSION_LIFETIME = 86400;
+
     public function __construct(public readonly Config $config, public readonly Store $store) {}
     public static function headers(): void {
         header('Content-Type: application/json; charset=utf-8'); header('Cache-Control: no-store, private'); header('Pragma: no-cache');
@@ -23,21 +25,25 @@ final class Http {
     public function startSession(): void {
         $sessionDir = rtrim($this->config->get('dataDirectory'), '/\\') . '/sessions';
         if (!is_dir($sessionDir)) mkdir($sessionDir, 0700, true);
-        ini_set('session.use_strict_mode', '1'); ini_set('session.use_only_cookies', '1'); ini_set('session.use_trans_sid', '0'); ini_set('session.gc_maxlifetime', '28800');
+        ini_set('session.use_strict_mode', '1'); ini_set('session.use_only_cookies', '1'); ini_set('session.use_trans_sid', '0'); ini_set('session.gc_maxlifetime', (string)self::SESSION_LIFETIME);
         session_save_path($sessionDir); session_name('RP_CONTACTS_SESSION'); session_cache_limiter('');
-        session_set_cookie_params(['lifetime' => 0, 'path' => $this->config->get('cookiePath', '/'), 'secure' => str_starts_with($this->config->get('origin'), 'https://'), 'httponly' => true, 'samesite' => 'Strict']);
+        session_set_cookie_params(['lifetime' => self::SESSION_LIFETIME, 'path' => $this->config->get('cookiePath', '/'), 'secure' => str_starts_with($this->config->get('origin'), 'https://'), 'httponly' => true, 'samesite' => 'Strict']);
         session_start();
         if (!isset($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(32));
         if (isset($_SESSION['authenticated']) && !$this->authenticated(false)) $this->clearAuthentication();
     }
     private function passwordVersion(): string { return hash_hmac('sha256', $this->config->get('passwordHash'), $this->config->key); }
     public function authenticated(bool $touch = true): bool {
-        $valid = ($_SESSION['authenticated'] ?? false) === true && isset($_SESSION['loginAt'], $_SESSION['lastActivity'], $_SESSION['passwordVersion']) && hash_equals($this->passwordVersion(), (string)$_SESSION['passwordVersion']) && time() - $_SESSION['lastActivity'] <= 900 && time() - $_SESSION['loginAt'] <= 28800;
+        $now = time();
+        $valid = ($_SESSION['authenticated'] ?? false) === true && isset($_SESSION['loginAt'], $_SESSION['lastActivity'], $_SESSION['passwordVersion']) && hash_equals($this->passwordVersion(), (string)$_SESSION['passwordVersion']) && $now - $_SESSION['lastActivity'] < self::SESSION_LIFETIME && $now - $_SESSION['loginAt'] < self::SESSION_LIFETIME;
         if ($valid && $touch) $_SESSION['lastActivity'] = time();
         return $valid;
     }
     public function requireAuthentication(): void { if (!$this->authenticated()) throw new Problem(401, 'Entre com a senha para acessar as solicitações.'); }
-    public function state(): array { return ['ok' => true, 'authenticated' => $this->authenticated(false), 'csrfToken' => $_SESSION['csrf'], 'submissionEnabled' => $this->config->get('submissionsEnabled', false) === true, 'mailConfigured' => $this->config->mailConfigured()]; }
+    public function state(): array {
+        $authenticated = $this->authenticated(false);
+        return ['ok' => true, 'authenticated' => $authenticated, 'sessionExpiresIn' => $authenticated ? max(0, $_SESSION['loginAt'] + self::SESSION_LIFETIME - time()) : 0, 'csrfToken' => $_SESSION['csrf'], 'submissionEnabled' => $this->config->get('submissionsEnabled', false) === true, 'mailConfigured' => $this->config->mailConfigured()];
+    }
     public function post(): array {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') throw new Problem(405, 'Método não permitido.');
         if (!isset($_SERVER['HTTP_ORIGIN']) || !hash_equals($this->config->get('origin'), $_SERVER['HTTP_ORIGIN'])) throw new Problem(403, 'Origem de acesso não permitida.');

@@ -14,7 +14,7 @@ filter.value = defaultRequestFilter;
 const refreshButton = $('#refresh');
 const previousButton = $('#previous-page');
 const nextButton = $('#next-page');
-const state = {authenticated: false, csrfToken: '', page: 1, totalPages: 1, busy: false, generation: 0, lastActivity: 0, view: 'requests'};
+const state = {authenticated: false, csrfToken: '', page: 1, totalPages: 1, busy: false, generation: 0, sessionExpiresAt: 0, view: 'requests'};
 const activityPagination = {page: 1, totalPages: 1};
 const activityMonth = $('#activity-month');
 const dailyViewToggle = $('#calendar-chart-toggle');
@@ -27,8 +27,8 @@ const views = {
   reports: ['Relatórios', 'Consulte os encaminhamentos de cada responsável e o movimento mensal das solicitações.'],
 };
 const viewNames = Object.keys(views);
-const idleMilliseconds = 15 * 60 * 1000;
-let idleTimer;
+const sessionMilliseconds = 24 * 60 * 60 * 1000;
+let sessionTimer;
 let apiBase;
 let requestCardSequence = 0;
 let archiveSelection = null;
@@ -67,9 +67,9 @@ function controlsBusy(busy) {
 function clearPrivateView() {
   state.generation++;
   state.authenticated = false;
-  state.lastActivity = 0;
+  state.sessionExpiresAt = 0;
   setView('requests');
-  clearTimeout(idleTimer);
+  clearTimeout(sessionTimer);
   list.replaceChildren();
   assignment = {names: [], next: null, revision: 0};
   activityMonth.replaceChildren();
@@ -148,11 +148,10 @@ function expired(error) {
   void refreshSession();
   return true;
 }
-function recordActivity() {
+function scheduleSessionExpiry() {
   if (!state.authenticated) return;
-  state.lastActivity = Date.now();
-  clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => { void logout(true); }, idleMilliseconds);
+  clearTimeout(sessionTimer);
+  sessionTimer = setTimeout(() => { void logout(true); }, Math.max(0, state.sessionExpiresAt - Date.now()));
 }
 function displaySuggestion(ownerGroup) {
   const button = ownerGroup.querySelector('.assignment-suggestion');
@@ -211,7 +210,7 @@ function renderItem(item) {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
       await navigator.clipboard.writeText(text);
       if (generation !== state.generation || !state.authenticated) return;
-      recordActivity();
+      scheduleSessionExpiry();
     } catch {
       if (generation !== state.generation || !state.authenticated) return;
       $('#copy-text').value = text;
@@ -286,7 +285,7 @@ function renderItem(item) {
     (flipped ? returnButton : showDetails).focus({preventScroll: true});
     inactiveFace.inert = true;
     inactiveFace.setAttribute('aria-hidden', 'true');
-    recordActivity();
+    scheduleSessionExpiry();
   }
   showDetails.addEventListener('click', () => flipCard(true));
   returnButton.addEventListener('click', () => flipCard(false));
@@ -371,7 +370,7 @@ function renderItem(item) {
       updateAssignment(result.assignment);
       updateDelivery();
       saveMessage.textContent = 'Alterações salvas.'; saveMessage.className = 'save-message'; saveMessage.hidden = false;
-      recordActivity();
+      scheduleSessionExpiry();
     } catch (error) {
       if (generation !== state.generation || expired(error)) return;
       saveMessage.textContent = error.status === 409 ? 'Outra pessoa alterou esta solicitação. Atualize a lista antes de salvar novamente.' : error.message;
@@ -411,7 +410,7 @@ async function loadRequests(page = state.page) {
     $('#page-indicator').textContent = 'Página ' + state.page + ' de ' + state.totalPages;
     $('#list-status').textContent = result.items.length ? result.items.length + (result.items.length === 1 ? ' solicitação exibida.' : ' solicitações exibidas.') : '';
     notice();
-    recordActivity();
+    scheduleSessionExpiry();
     return true;
   } catch (error) {
     if (generation !== state.generation || expired(error)) return false;
@@ -471,7 +470,7 @@ $('#confirm-archive').addEventListener('click', async () => {
     }
     notice(selection.archived ? 'Solicitação inativada. Ela não entra mais nos relatórios e pode ser restaurada no filtro Inativas.' : 'Solicitação restaurada. Ela voltou para a lista e para os relatórios.', 'success');
     filter.focus({preventScroll: true});
-    recordActivity();
+    scheduleSessionExpiry();
   } catch (error) {
     if (generation !== state.generation || expired(error)) return;
     if (error.status === 409) {
@@ -1007,7 +1006,7 @@ async function loadSimulationActivity(page) {
     }
     renderSimulationActivity(result);
     notice();
-    recordActivity();
+    scheduleSessionExpiry();
   } catch (error) {
     if (generation !== state.generation || expired(error)) return;
     clearSimulationActivity();
@@ -1088,7 +1087,7 @@ async function loadReports() {
     if (generation !== state.generation || !state.authenticated) return;
     if (result.year !== year) throw new Error('O ano retornado não corresponde ao selecionado. Atualize o relatório.');
     renderReport(result);
-    notice(); recordActivity();
+    notice(); scheduleSessionExpiry();
   } catch (error) {
     if (generation !== state.generation || expired(error)) return;
     $('#report-status').textContent = 'Não foi possível atualizar o relatório.';
@@ -1099,6 +1098,8 @@ function applySession(data) {
   if (typeof data.csrfToken !== 'string' || data.csrfToken.length < 16) throw new Error('A área de solicitações ainda precisa ser configurada pela TI.');
   state.csrfToken = data.csrfToken;
   state.authenticated = data.authenticated === true;
+  const remaining = Number.isFinite(data.sessionExpiresIn) ? Math.max(0, Math.min(sessionMilliseconds, data.sessionExpiresIn * 1000)) : sessionMilliseconds;
+  state.sessionExpiresAt = state.authenticated ? Date.now() + remaining : 0;
   loginPanel.hidden = state.authenticated;
   workspace.hidden = !state.authenticated;
   logoutButton.hidden = !state.authenticated;
@@ -1108,7 +1109,7 @@ function applySession(data) {
   if (!data.submissionEnabled) notices.push('O recebimento de novas solicitações ainda não está ativado.');
   deliveryNotice.textContent = notices.join(' ');
   deliveryNotice.hidden = !state.authenticated || state.view === 'activity' || !notices.length;
-  if (state.authenticated) recordActivity();
+  if (state.authenticated) scheduleSessionExpiry();
 }
 async function refreshSession(load = true) {
   const generation = state.generation;
@@ -1133,7 +1134,7 @@ async function logout(automatic = false) {
     await api('logout.php', {method: 'POST', body: {}});
     state.csrfToken = '';
     await refreshSession(false);
-    notice(automatic ? 'Sua sessão foi encerrada por inatividade. Entre novamente para continuar.' : 'Você saiu da área de solicitações.');
+    notice(automatic ? 'Seu acesso de 24 horas expirou. Entre novamente para continuar.' : 'Você saiu da área de solicitações.');
   } catch (error) {
     if (error.status === 401 || error.status === 403) {
       state.csrfToken = '';
@@ -1203,10 +1204,9 @@ filter.addEventListener('change', () => { void loadRequests(1); });
 refreshButton.addEventListener('click', () => { void loadRequests(); });
 previousButton.addEventListener('click', () => { if (state.page > 1) void loadRequests(state.page - 1); });
 nextButton.addEventListener('click', () => { if (state.page < state.totalPages) void loadRequests(state.page + 1); });
-for (const event of ['pointerdown', 'keydown', 'input']) document.addEventListener(event, recordActivity, {passive: true});
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible' || !state.authenticated) return;
-  if (Date.now() - state.lastActivity >= idleMilliseconds) { void logout(true); return; }
+  if (Date.now() >= state.sessionExpiresAt) { void logout(true); return; }
   const generation = state.generation;
   void api('session.php').then(data => {
     if (generation !== state.generation) return;

@@ -36,6 +36,29 @@ class Client {
     return {status:response.status,body,headers:response.headers};
   }
 }
+function checkPersistentLoginCookie(response) {
+  const cookie = response.headers.getSetCookie().find(value => value.startsWith('RP_CONTACTS_SESSION='));
+  assert.ok(cookie,'Login emite o cookie autenticado');
+  assert.match(cookie, /; Max-Age=86400(?:;|$)/i);
+  assert.match(cookie, /; HttpOnly(?:;|$)/i);
+  assert.match(cookie, /; SameSite=Strict(?:;|$)/i);
+  const expires = Date.parse(cookie.match(/; expires=([^;]+)/i)?.[1]);
+  const serverTime = Date.parse(response.headers.get('date'));
+  check(Math.abs(expires - serverTime - 86400000) <= 2000,true,'Cookie do login persiste por 24 horas');
+  check(response.body.sessionExpiresIn >= 86398 && response.body.sessionExpiresIn <= 86400,true,'Login informa as 24 horas restantes ao painel');
+  checks += 4;
+}
+async function ageSession(client, loginAge, activityAge) {
+  const sessionId = client.cookie.split('=')[1];
+  const sessionPath = path.join(configuration.dataDirectory,'sessions',`sess_${sessionId}`);
+  const now = Math.floor(Date.now() / 1000);
+  const session = await fs.readFile(sessionPath,'utf8');
+  assert.match(session,/loginAt\|i:\d+;/);
+  assert.match(session,/lastActivity\|i:\d+;/);
+  await fs.writeFile(sessionPath,session
+    .replace(/loginAt\|i:\d+;/,`loginAt|i:${now - loginAge};`)
+    .replace(/lastActivity\|i:\d+;/,`lastActivity|i:${now - activityAge};`));
+}
 const deviceHeaders = {
   mobile: {'User-Agent':'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0 Mobile Safari/537.36'},
   desktop: {'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0 Safari/537.36'},
@@ -325,7 +348,7 @@ try {
     check(refused.status,405,'Método de escrita não altera a tabela'); check(refused.headers.get('allow'),'GET, HEAD','Somente métodos de leitura são permitidos');
   }
   const customer=new Client(), admin=new Client(), stranger=new Client();
-  let result=await customer.call('session.php'); check(result.status,200,'Sessão pública'); check(result.body.authenticated,false,'Sessão começa sem login');
+  let result=await customer.call('session.php'); check(result.status,200,'Sessão pública'); check(result.body.authenticated,false,'Sessão começa sem login'); check(result.body.sessionExpiresIn,0,'Sessão pública não tem prazo autenticado');
   assert.match(result.headers.get('set-cookie'),/HttpOnly/i); assert.match(result.headers.get('set-cookie'),/SameSite=Strict/i); checks+=2;
   check((await stranger.call('requests.php')).status,401,'Lista sem senha bloqueada');
   check((await stranger.call('requests.php',{headers:{Origin:'http://192.168.90.7:8082','Sec-Fetch-Site':'cross-site'}})).status,403,'CORS público de preços não libera a API de contatos');
@@ -349,6 +372,7 @@ try {
   await admin.call('session.php'); const oldCookie=admin.cookie,oldCsrf=admin.csrf;
   result=await admin.call('login.php',{method:'POST',data:{password}}); check(result.status,200,'Login válido'); check(result.body.authenticated,true,'Autenticação confirmada');
   assert.notEqual(admin.cookie,oldCookie); assert.notEqual(admin.csrf,oldCsrf); checks+=2;
+  checkPersistentLoginCookie(result);
   result=await admin.call('requests.php'); check(result.body.total,1,'Somente um registro');
   const item=result.body.items[0]; check(item.request.contact.name,'Teste HTTP','Contato preservado'); assert.notEqual(item.request.estimate.totalCents,request.estimate.totalCents); checks++;
   check(item.request.contact.supportContact,'JANAINA','Painel autenticado recebe o atendente informado com espaços externos removidos');
@@ -402,14 +426,53 @@ try {
   result=await admin.call('reports.php?year='+reportYear); check(result.body.total.count,1,'Restauração recompõe contagem'); check(result.body.total.totalCents,item.request.estimate.pixCents,'Restauração recompõe valor histórico');
   const sampleActivity = await checkActivity(customer,admin,item,reportYear);
   await checkMonthlyActivity(customer,admin);
-  check((await admin.call('logout.php',{method:'POST',data:{}})).body.authenticated,false,'Logout aceita objeto vazio');
-  check((await admin.call('requests.php')).status,401,'Logout revoga leitura');
+  for (const [elapsed,label] of [[901,'15 minutos'],[28801,'8 horas'],[86340,'23h59']]) {
+    await ageSession(admin,elapsed,elapsed);
+    const reopened = new Client();
+    reopened.cookie = admin.cookie;
+    const restored = (await reopened.call('session.php')).body;
+    check(restored.authenticated,true,'Reabertura mantém login após '+label+' sem atividade');
+    check(Math.abs(restored.sessionExpiresIn - (86400 - elapsed)) <= 2,true,'Painel recebe somente o prazo restante após '+label);
+    check((await reopened.call('requests.php')).status,200,'Acesso restrito continua disponível após '+label);
+  }
+  const loggedOutCookie=admin.cookie,loggedOutCsrf=admin.csrf;
+  const loggedOut = (await admin.call('logout.php',{method:'POST',data:{}})).body;
+  check(loggedOut.authenticated,false,'Logout aceita objeto vazio');
+  check(loggedOut.sessionExpiresIn,0,'Logout limpa o prazo informado ao painel');
+  assert.notEqual(admin.cookie,loggedOutCookie);
+  assert.notEqual(admin.csrf,loggedOutCsrf);
+  checks += 2;
+  check((await admin.call('requests.php')).status,401,'Logout revoga leitura imediatamente');
   check((await admin.call('reports.php')).status,401,'Logout revoga relatório');
-  await admin.call('login.php',{method:'POST',data:{password}});
-  const sessionId=admin.cookie.split('=')[1]; const sessionPath=path.join(configuration.dataDirectory,'sessions',`sess_${sessionId}`);
-  await fs.writeFile(sessionPath,(await fs.readFile(sessionPath,'utf8')).replace(/lastActivity\|i:\d+;/,'lastActivity|i:0;'));
-  check((await admin.call('session.php')).body.authenticated,false,'Sessão expira por inatividade'); check((await admin.call('requests.php')).status,401,'Sessão expirada bloqueia dados');
-  for(let i=0;i<3;i++) await admin.call('login.php',{method:'POST',data:{password:'wrong'}});
+  const previousSession = new Client();
+  previousSession.cookie = loggedOutCookie;
+  check((await previousSession.call('requests.php')).status,401,'Cookie persistente anterior ao logout perde acesso');
+
+  result=await admin.call('login.php',{method:'POST',data:{password}});
+  check(result.body.authenticated,true,'Novo login restaura acesso após logout');
+  checkPersistentLoginCookie(result);
+  await ageSession(admin,86401,0);
+  const expired = (await admin.call('session.php')).body;
+  check(expired.authenticated,false,'Sessão expira após 24 horas do login mesmo com atividade recente');
+  check(expired.sessionExpiresIn,0,'Expiração zera o prazo restante');
+  check((await admin.call('requests.php')).status,401,'Prazo absoluto impede acesso aos dados');
+  check((await admin.call('reports.php')).status,401,'Prazo absoluto impede acesso aos relatórios');
+
+  result=await admin.call('login.php',{method:'POST',data:{password}});
+  check(result.body.authenticated,true,'Login posterior à expiração recebe novo prazo');
+  checkPersistentLoginCookie(result);
+  const replacementHash=spawnSync(php,['-r','echo password_hash(trim(stream_get_contents(STDIN)), PASSWORD_DEFAULT);'],
+    {input:randomBytes(24).toString('hex'),encoding:'utf8',windowsHide:true});
+  assert.equal(replacementHash.status,0,replacementHash.stderr);
+  await writeConfig({...configuration,passwordHash:replacementHash.stdout});
+  check((await admin.call('requests.php')).status,401,'Troca da senha revoga sessão dentro do prazo de 24 horas');
+  const revoked = (await admin.call('session.php')).body;
+  check(revoked.authenticated,false,'Estado público confirma a revogação pela senha');
+  check(revoked.sessionExpiresIn,0,'Senha alterada zera o prazo restante');
+  await writeConfig();
+  check((await admin.call('requests.php')).status,401,'Restauração da configuração não recupera sessão revogada');
+  // Três logins válidos já utilizaram três das cinco tentativas permitidas.
+  for(let i=0;i<2;i++) check((await admin.call('login.php',{method:'POST',data:{password:'wrong'}})).status,401,'Senha incorreta rejeitada antes do limite');
   check((await admin.call('login.php',{method:'POST',data:{password:'wrong'}})).status,429,'Tentativas de senha limitadas');
   await writeConfig({...configuration,submissionsEnabled:false}); check((await customer.call('requests.php',{method:'POST',data:request,headers:{'Idempotency-Key':randomUUID()}})).status,503,'Recebimento desativável');
   check((await customer.call('activity.php',{method:'POST',data:sampleActivity})).status,503,'Coleta desativada com o recebimento');

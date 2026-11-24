@@ -13,7 +13,8 @@ O formulário não cobra, não aprova propostas e não envia confirmação autom
 ## Proteção e limites
 
 - O navegador recebe a lista somente após validação de senha no servidor. Ocultar a tela ou o botão não é o mecanismo de proteção.
-- A senha fica como hash privado, e as sessões têm cookies HttpOnly, SameSite e Secure em produção, com expiração por inatividade e prazo máximo. Alterar o hash invalida os acessos anteriores.
+- A senha fica como hash privado, e as sessões têm cookies HttpOnly, SameSite e Secure em produção. O acesso dura 24 horas a partir do login, inclusive ao fechar e reabrir o mesmo navegador, e não é prorrogado pela navegação. **Sair** ou alterar o hash da senha invalida o acesso imediatamente. Depois desta atualização, entrar novamente para receber o cookie persistente de 24 horas.
+- A pasta privada `dataDirectory/sessions` deve ser preservada entre versões e não pode ser limpa pela hospedagem antes de 24 horas. O serviço define `session.gc_maxlifetime=86400`; o servidor também verifica o prazo absoluto em cada acesso, independentemente da limpeza de arquivos e do cookie.
 - Os dados da solicitação e a observação ficam criptografados no banco com libsodium. A chave fica fora da pasta pública e fora do Git. Metadados como protocolo, data, encaminhamento e situação do e-mail permanecem disponíveis ao serviço para organização.
 - Banco, sessões, chave e configuração devem ficar fora de qualquer raiz pública, alias ou pasta de release. A criptografia não substitui os controles de acesso ao servidor e ao backup.
 - O acesso real exige HTTPS, inclusive para o painel usado pela equipe. O endereço interno HTTP atual não deve receber senhas ou contatos reais deste módulo. HTTP só é aceito em localhost para testes locais explícitos.
